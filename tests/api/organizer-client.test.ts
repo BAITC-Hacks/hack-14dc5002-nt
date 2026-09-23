@@ -40,6 +40,9 @@ describe("organizer client", () => {
   it("does not match stale event versions or unsupported targets", async () => {
     expect(await api.previewEvent({ basePlan: getOrganizerCatalog().demoPlan, eventId: "cancel-action", eventVersion: "stale", cancelledActionId: "M7" })).toMatchObject({ ok: false });
   });
+  it.each(["ru", "kk", "en"] as const)("provides explicit %s explanation fixtures", async (language) => {
+    expect(await api.explain({ kind: "base", plan: getOrganizerCatalog().demoPlan, language })).toMatchObject({ ok: true, data: { source: "template", language } });
+  });
   it("uses real transport with mock=false, supports abort and preserves API errors", async () => {
     vi.resetModules();
     vi.stubEnv("NEXT_PUBLIC_USE_MOCK_API", "false");
@@ -53,6 +56,17 @@ describe("organizer client", () => {
     controller.abort();
     expect(await api.getCatalog(controller.signal)).toMatchObject({ ok: false, error: { code: "REQUEST_ABORTED" } });
     fetchMock.mockResolvedValue(Response.json({ strange: true }));
+    expect(await api.getCatalog()).toMatchObject({ ok: false, error: { code: "INVALID_RESPONSE" } });
+  });
+  it.each([
+    [{ ok: true, data: null }, 200],
+    [{ ok: false, error: { code: "X" } }, 400],
+    [{ ok: true, data: { anything: true } }, 500],
+  ])("rejects malformed HTTP envelopes", async (payload, status) => {
+    vi.resetModules();
+    vi.stubEnv("NEXT_PUBLIC_USE_MOCK_API", "false");
+    api = await import("@/lib/organizer-api");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(payload, { status })));
     expect(await api.getCatalog()).toMatchObject({ ok: false, error: { code: "INVALID_RESPONSE" } });
   });
 });

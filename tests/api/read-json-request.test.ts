@@ -3,6 +3,12 @@ import { readJsonRequest } from "@/lib/server/read-json-request";
 import { planInputSchema } from "@/lib/server/request-schemas";
 
 describe("readJsonRequest", () => {
+  it("limits bodies even without Content-Length", async () => {
+    const request = new Request("http://localhost/api/simulate", { method: "POST", body: JSON.stringify({ padding: "x".repeat(33000) }) });
+    const result = await readJsonRequest(request, planInputSchema);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.response.status).toBe(400);
+  });
   it("returns parsed data for a valid request", async () => {
     const request = new Request("http://localhost/api/simulate", {
       method: "POST",

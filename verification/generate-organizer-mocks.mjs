@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { simulatePlan } from "../src/lib/simulation/index.ts";
 import { previewEvent, confirmEvent } from "../src/lib/simulation/events.ts";
 import { ACTION_CANCELLATION_EVENT, SCHOOL_CANCELLATION_EVENT, REQUIRED_ACTION_EVENT } from "../src/data/team-events.ts";
+import { buildExplanation } from "../src/lib/server/explanation-templates.ts";
 
 const raw = JSON.parse(fs.readFileSync(new URL("../src/data/organizer-catalog.json", import.meta.url), "utf8"));
 const catalog = { ...raw, teamEvents: [ACTION_CANCELLATION_EVENT, SCHOOL_CANCELLATION_EVENT, REQUIRED_ACTION_EVENT].map(({ id, version, kind, source, title, disclaimer }) => ({ id, version, modelVersion: raw.config.modelVersion, kind, source, title, disclaimer })) };
@@ -24,6 +25,13 @@ for (const input of [
   for (const option of preview.replacementOptions) {
     const change = { ...input, removedActionId: option.removedActionId, addedActionId: option.addedActionId, ...(option.addedSelection.districtId ? { addedDistrictId: option.addedSelection.districtId } : {}) };
     add("confirm", change, confirmEvent(change, catalog));
+  }
+}
+for (const language of ["ru", "kk", "en"]) {
+  add("explain", { kind: "base", plan: catalog.demoPlan, language }, buildExplanation({ catalog, result: simulatePlan(catalog.demoPlan, catalog) }, language).template);
+  for (const scenario of scenarios.filter((item) => item.operation === "confirm")) {
+    const { base, branch, comparison } = scenario.response.data;
+    add("explain", { kind: "event", change: scenario.input, language }, buildExplanation({ catalog, result: branch, base, comparison, change: scenario.input }, language).template);
   }
 }
 const output = new URL("../src/mocks/organizer/scenarios.json", import.meta.url);

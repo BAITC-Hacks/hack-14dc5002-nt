@@ -20,6 +20,10 @@ afterEach(() => {
 });
 
 describe("client API HTTP transport", () => {
+  it("stops the legacy dashboard from reading an incompatible organizer catalog", async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ ok: true, data: { config: { modelVersion: "organizer-v1" } } }));
+    await expect(api.getCatalog()).resolves.toMatchObject({ ok: false, error: { code: "UI_CONTRACT_OUTDATED" } });
+  });
   it("fetches the catalog with GET when mock mode is disabled", async () => {
     const payload = { ok: true, data: catalog };
     fetchMock.mockResolvedValueOnce(Response.json(payload));

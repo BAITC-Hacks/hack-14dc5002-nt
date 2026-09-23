@@ -18,7 +18,30 @@ export async function readJsonRequest<TSchema extends z.ZodType>(
   let body: unknown;
 
   try {
-    body = await request.json();
+    // Bound actual bytes, including chunked requests without Content-Length.
+    const limit = 32 * 1024;
+    const reader = request.body?.getReader();
+    if (!reader) return { ok: false, response: invalidRequest("Пустое тело запроса.") };
+    const chunks: Uint8Array[] = [];
+    let length = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        length += value.byteLength;
+        if (length > limit) {
+          await reader.cancel();
+          return { ok: false, response: invalidRequest("Тело запроса превышает 32 КиБ.") };
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    const bytes = new Uint8Array(length);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    body = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
   } catch {
     return { ok: false, response: invalidRequest("Тело запроса должно быть корректным JSON.") };
   }

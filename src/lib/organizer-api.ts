@@ -32,7 +32,9 @@ async function http<T>(path: string, input?: unknown, signal?: AbortSignal): Pro
       body: input === undefined ? undefined : JSON.stringify(input), signal,
     });
     const body = await response.json();
-    if (!body || typeof body.ok !== "boolean" || (body.ok ? !("data" in body) : typeof body.error?.code !== "string")) {
+    if (!body || typeof body.ok !== "boolean" || (body.ok
+      ? (!response.ok || !body.data || typeof body.data !== "object" || Array.isArray(body.data))
+      : (typeof body.error?.code !== "string" || typeof body.error?.message !== "string"))) {
       return failure("INVALID_RESPONSE", "Сервер вернул ответ неизвестного формата.");
     }
     return body as ApiResponse<T>;
