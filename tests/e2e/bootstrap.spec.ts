@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import catalog from "../../src/data/catalog.json";
+import catalog from "../../src/data/organizer-catalog.json";
 
 test("dashboard loads the mock catalog, runs the demo plan and fits the viewport", async ({ page }, testInfo) => {
   const pageErrors: string[] = [];
@@ -29,5 +29,5 @@ test("catalog endpoint returns the shared envelope and data without an API key",
   const response = await request.get("/api/catalog");
   expect(response.status()).toBe(200);
   expect(response.headers()["content-type"]).toContain("application/json");
-  expect(await response.json()).toEqual({ ok: true, data: catalog });
+  expect(await response.json()).toMatchObject({ ok: true, data: { ...catalog, teamEvents: expect.any(Array) } });
 });

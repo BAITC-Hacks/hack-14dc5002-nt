@@ -45,7 +45,13 @@ function mockScenario<T>(supported: boolean, fixture: ApiResponse<T>): ApiRespon
 }
 
 export async function getCatalog(): Promise<ApiResponse<Catalog>> {
-  if (!isMock) return request<Catalog>("/api/catalog");
+  if (!isMock) {
+    const result = await request<Catalog>("/api/catalog");
+    if (result.ok && result.data.config.modelVersion !== catalogFixture.data.config.modelVersion) {
+      return error("UI_CONTRACT_OUTDATED", "Для новой модели нужен интерфейс с выбором районов. Подключите organizer-api; старое демо доступно в mock-режиме.");
+    }
+    return result;
+  }
   return structuredClone(catalogFixture) as ApiResponse<Catalog>;
 }
 

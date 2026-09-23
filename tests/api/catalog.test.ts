@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import catalog from "@/data/catalog.json";
+import { getOrganizerCatalog } from "@/lib/server/organizer-catalog";
 import { GET } from "@/app/api/catalog/route";
 
 describe("GET /api/catalog", () => {
@@ -7,6 +7,6 @@ describe("GET /api/catalog", () => {
     const response = GET();
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ ok: true, data: catalog });
+    await expect(response.json()).resolves.toEqual({ ok: true, data: getOrganizerCatalog() });
   });
 });
