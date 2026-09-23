@@ -7,6 +7,7 @@ import type {
 } from "../../contracts/index.ts";
 
 const EPSILON = 1e-9;
+const lexical = (left: string, right: string) => left < right ? -1 : left > right ? 1 : 0;
 
 export class DomainError extends Error {
   readonly code: string;
@@ -144,7 +145,7 @@ function blankMetrics(): Metrics {
 }
 
 function calculateValid(plan: PlanInput, catalog: Catalog): ValidSimulation {
-  const ids = [...plan.actionIds].sort((a, b) => a.localeCompare(b));
+  const ids = [...plan.actionIds].sort(lexical);
   const canonicalPlan: PlanInput = { modelVersion: plan.modelVersion, actionIds: ids };
   const actions = ids.map((id) => catalog.actions.find((action) => action.id === id) as Action);
   const totalCost = actions.reduce((sum, action) => sum + action.cost, 0);
@@ -199,4 +200,110 @@ export function simulatePlan(plan: PlanInput, catalog: Catalog, eventId?: string
     };
   }
   return calculateValid(plan, catalog);
+}
+
+function requireEvent(eventId: string, catalog: Catalog) {
+  const event = catalog.events.find((candidate) => candidate.id === eventId);
+  if (!event) throw new DomainError("UNKNOWN_EVENT", `Неизвестное событие ${eventId}.`, [issue("UNKNOWN_EVENT", `Неизвестное событие ${eventId}.`)]);
+  return event;
+}
+
+function requireValidBase(basePlan: PlanInput, catalog: Catalog): ValidSimulation {
+  const base = simulatePlan(basePlan, catalog);
+  if (!base.valid) throw new DomainError("INVALID_BASE_PLAN", "Исходный план события недопустим.", base.errors);
+  return base;
+}
+
+function requireValidBranch(plan: PlanInput, catalog: Catalog, eventId: string): ValidSimulation {
+  const branch = simulatePlan(plan, catalog, eventId);
+  if (!branch.valid) throw new DomainError("INVALID_EVENT_SWAP", "Замена не образует допустимый план.", branch.errors);
+  return branch;
+}
+
+function comparison(base: ValidSimulation, branch: ValidSimulation, catalog: Catalog): Comparison {
+  const dimensionsDelta = blankMetrics();
+  for (const direction of DIRECTIONS) dimensionsDelta[direction] = branch.metrics.dimensions[direction] - base.metrics.dimensions[direction];
+  const districts = catalog.districts.map((district) => {
+    const before = base.metrics.districts.find((item) => item.districtId === district.id)!;
+    const after = branch.metrics.districts.find((item) => item.districtId === district.id)!;
+    const districtDimensionsDelta = blankMetrics();
+    for (const direction of DIRECTIONS) districtDimensionsDelta[direction] = after.after[direction] - before.after[direction];
+    return { districtId: district.id, scoreDelta: after.scoreAfter - before.scoreAfter, dimensionsDelta: districtDimensionsDelta };
+  });
+  return { scoreDelta: branch.officialScore - base.officialScore, dimensionsDelta, districts };
+}
+
+function sortAndLimit(options: ReplacementOption[]): ReplacementOption[] {
+  return options.sort((left, right) => {
+    const scoreDifference = Math.round(right.result.officialScore * 1e9) - Math.round(left.result.officialScore * 1e9);
+    return scoreDifference || left.result.totalCost - right.result.totalCost || lexical(left.addedActionId, right.addedActionId) || lexical(left.removedActionId, right.removedActionId);
+  }).slice(0, 3);
+}
+
+function planForSwap(base: ValidSimulation, removedActionId: string, addedActionId: string): PlanInput {
+  return {
+    modelVersion: base.plan.modelVersion,
+    actionIds: base.plan.actionIds.filter((id) => id !== removedActionId).concat(addedActionId),
+  };
+}
+
+function recommendations(base: ValidSimulation, event: Catalog["events"][number], catalog: Catalog): ReplacementOption[] {
+  const removedIds = event.kind === "cancellation" ? [event.blockedActionId] : base.plan.actionIds;
+  const fixedAddedId = event.kind === "opportunity" ? event.unlockedActionId : undefined;
+  const candidates = fixedAddedId
+    ? catalog.actions.filter((action) => action.id === fixedAddedId)
+    : catalog.actions.filter((action) => action.availability.kind === "always");
+  const options: ReplacementOption[] = [];
+  for (const removedActionId of removedIds) {
+    for (const action of candidates) {
+      if (base.plan.actionIds.includes(action.id)) continue;
+      const nextPlan = planForSwap(base, removedActionId, action.id);
+      const result = simulatePlan(nextPlan, catalog, event.id);
+      if (!result.valid) continue;
+      options.push({
+        removedActionId,
+        addedActionId: action.id,
+        plan: result.plan,
+        result,
+        comparison: comparison(base, result, catalog),
+      });
+    }
+  }
+  return sortAndLimit(options);
+}
+
+/** Creates a separate, deterministic preview branch for a catalog event. */
+export function previewEvent(input: EventPreviewInput, catalog: Catalog): EventPreviewResult {
+  if (!input || typeof input.eventId !== "string") throw new DomainError("UNKNOWN_EVENT", "Не указано корректное событие.");
+  const event = requireEvent(input.eventId, catalog);
+  const base = requireValidBase(input.basePlan, catalog);
+  if (event.kind === "cancellation" && !base.plan.actionIds.includes(event.blockedActionId)) {
+    throw new DomainError("EVENT_NOT_APPLICABLE", "Отменяемое мероприятие отсутствует в исходном плане.", [issue("EVENT_NOT_APPLICABLE", "Событие отмены неприменимо к исходному плану.", [event.blockedActionId])]);
+  }
+  const draft: PlanInput = event.kind === "cancellation"
+    ? { modelVersion: base.plan.modelVersion, actionIds: base.plan.actionIds.filter((id) => id !== event.blockedActionId) }
+    : { modelVersion: base.plan.modelVersion, actionIds: [...base.plan.actionIds] };
+  const draftResult = simulatePlan(draft, catalog);
+  return { base, event, draft, draftResult, requiresReplacement: true, replacementOptions: recommendations(base, event, catalog) };
+}
+
+/** Revalidates an event swap from catalog data and returns a fresh comparison. */
+export function confirmEvent(input: EventConfirmInput, catalog: Catalog): EventConfirmResult {
+  if (!input || typeof input.eventId !== "string") throw new DomainError("UNKNOWN_EVENT", "Не указано корректное событие.");
+  const event = requireEvent(input.eventId, catalog);
+  const base = requireValidBase(input.basePlan, catalog);
+  const { removedActionId, addedActionId } = input;
+  const baseIds = base.plan.actionIds;
+  if (typeof removedActionId !== "string" || typeof addedActionId !== "string" || !baseIds.includes(removedActionId) || baseIds.includes(addedActionId)) {
+    throw new DomainError("INVALID_EVENT_SWAP", "Укажите одно выбранное мероприятие для удаления и одно новое для добавления.", [issue("INVALID_EVENT_SWAP", "Пара замены не соответствует исходной пятерке.", [removedActionId, addedActionId].filter((id): id is string => typeof id === "string"))]);
+  }
+  if (event.kind === "cancellation" && removedActionId !== event.blockedActionId) {
+    throw new DomainError("INVALID_EVENT_SWAP", "Событие разрешает заменить только отмененное мероприятие.", [issue("INVALID_EVENT_SWAP", "Удаляемое мероприятие не совпадает с отмененным.", [removedActionId, event.blockedActionId])]);
+  }
+  if (event.kind === "opportunity" && addedActionId !== event.unlockedActionId) {
+    throw new DomainError("INVALID_EVENT_SWAP", "Событие разрешает добавить только открывшееся мероприятие.", [issue("INVALID_EVENT_SWAP", "Добавляемое мероприятие не совпадает с открывшимся.", [addedActionId, event.unlockedActionId])]);
+  }
+  const candidatePlan = planForSwap(base, removedActionId, addedActionId);
+  const branch = requireValidBranch(candidatePlan, catalog, event.id);
+  return { base, event, branch, comparison: comparison(base, branch, catalog) };
 }

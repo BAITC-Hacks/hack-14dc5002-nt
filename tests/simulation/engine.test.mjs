@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { validatePlan, simulatePlan } from "../../src/lib/simulation/index.ts";
+import { DomainError, validatePlan, simulatePlan, previewEvent, confirmEvent } from "../../src/lib/simulation/index.ts";
 
 const root = new URL("../../", import.meta.url);
 const catalog = JSON.parse(await readFile(new URL("src/data/catalog.json", root), "utf8"));
@@ -81,6 +81,9 @@ test("lag is stepwise: inactive before horizon, active at and after lag", () => 
   custom.config.horizonMonths = 18;
   const atLag = simulatePlan(plan(ids), custom);
   assert.equal(atLag.trace.find((entry) => entry.actionId === "green_longterm").active, true);
+  custom.config.horizonMonths = 19;
+  const afterLag = simulatePlan(plan(ids), custom);
+  assert.equal(afterLag.trace.find((entry) => entry.actionId === "green_longterm").active, true);
 });
 
 test("negative effects are applied and values clamp once after summing", () => {
@@ -118,4 +121,81 @@ test("malformed catalogue is rejected", () => {
   const custom = clone(catalog);
   custom.districts[0].weight = -1;
   assert.ok(validatePlan(demoPlan, custom).some((entry) => entry.code === "INVALID_CATALOG"));
+});
+
+test("cancellation preview preserves base, returns a four-action draft, and uses freed budget", () => {
+  const input = { basePlan: clone(demoPlan), eventId: "school_site_unavailable" };
+  const inputBefore = clone(input);
+  const baseSnapshot = simulatePlan(input.basePlan, catalog);
+  const preview = previewEvent(input, catalog);
+  assert.equal(preview.base.totalCost, 90);
+  close(preview.base.officialScore, 57);
+  assert.equal(preview.draft.actionIds.length, 4);
+  assert.equal(preview.draftResult.valid, false);
+  assert.equal(preview.draftResult.officialScore, null);
+  assert.equal(preview.draftResult.metrics, null);
+  assert.equal(preview.draftResult.remainingBudget, 40);
+  assert.ok(preview.replacementOptions.length <= 3);
+  assert.ok(preview.replacementOptions.every((option) => option.result.valid && option.plan.actionIds.length === 5));
+  assert.ok(preview.replacementOptions.some((option) => option.addedActionId === "school_modular" && option.result.totalCost === 96));
+  const modular = preview.replacementOptions.find((option) => option.addedActionId === "school_modular");
+  close(modular.result.officialScore, 56.6);
+  assert.deepEqual(input, inputBefore);
+  assert.deepEqual(preview.base, baseSnapshot);
+});
+
+test("cancellation confirmation recalculates selected replacement and comparison", () => {
+  const input = { basePlan: clone(demoPlan), eventId: "school_site_unavailable", removedActionId: "school_new", addedActionId: "school_modular" };
+  const original = clone(input);
+  const baseSnapshot = simulatePlan(input.basePlan, catalog);
+  const result = confirmEvent(input, catalog);
+  assert.equal(result.base.totalCost, 90);
+  close(result.base.officialScore, 57);
+  assert.equal(result.branch.totalCost, 96);
+  close(result.branch.officialScore, 56.6);
+  close(result.comparison.scoreDelta, -0.4);
+  assert.deepEqual(input, original);
+  assert.deepEqual(result.base, baseSnapshot);
+});
+
+test("events reject unknown, inapplicable, malformed, and inconsistent swaps", () => {
+  assert.throws(() => previewEvent({ basePlan: demoPlan, eventId: "no-such-event" }, catalog), (error) => error instanceof DomainError && error.code === "UNKNOWN_EVENT");
+  const otherBase = plan(["bus_lanes", "bus_fleet", "park_local", "lighting_smart", "services_online"]);
+  assert.throws(() => previewEvent({ basePlan: otherBase, eventId: "school_site_unavailable" }, catalog), (error) => error instanceof DomainError && error.code === "EVENT_NOT_APPLICABLE");
+  assert.throws(() => confirmEvent({ basePlan: demoPlan, eventId: "school_site_unavailable", removedActionId: "park_local", addedActionId: "bus_fleet" }, catalog), (error) => error instanceof DomainError && error.code === "INVALID_EVENT_SWAP");
+  assert.throws(() => confirmEvent({ basePlan: demoPlan, eventId: "school_site_unavailable", removedActionId: "school_new", addedActionId: "school_new" }, catalog), (error) => error instanceof DomainError && error.code === "INVALID_EVENT_SWAP");
+});
+
+test("cancellation offers no invalid or unaffordable alternatives", () => {
+  const custom = clone(catalog);
+  for (const action of custom.actions) if (!demoPlan.actionIds.includes(action.id)) action.cost = 1000;
+  const preview = previewEvent({ basePlan: demoPlan, eventId: "school_site_unavailable" }, custom);
+  assert.deepEqual(preview.replacementOptions, []);
+});
+
+test("equal recommendation scores have deterministic cost and ID ordering", () => {
+  const custom = clone(catalog);
+  for (const action of custom.actions) {
+    action.cost = 10;
+    action.effects = {};
+  }
+  const preview = previewEvent({ basePlan: demoPlan, eventId: "school_site_unavailable" }, custom);
+  assert.deepEqual(preview.replacementOptions.map((option) => option.addedActionId), ["bus_fleet", "classes_rental", "clinic_outreach"]);
+});
+
+test("opportunity replaces one existing action and confirms only the unlocked action", () => {
+  const input = { basePlan: clone(demoPlan), eventId: "digital_grant_available" };
+  const inputBefore = clone(input);
+  const preview = previewEvent(input, catalog);
+  assert.equal(preview.draftResult.valid, true);
+  assert.equal(preview.draft.actionIds.length, 5);
+  assert.ok(preview.replacementOptions.every((option) => option.plan.actionIds.length === 5 && option.addedActionId === "digital_grant"));
+  assert.ok(preview.replacementOptions.length <= 3);
+  const confirmed = confirmEvent({ ...input, removedActionId: "bus_lanes", addedActionId: "digital_grant" }, catalog);
+  assert.equal(confirmed.branch.valid, true);
+  assert.equal(confirmed.branch.plan.actionIds.length, 5);
+  assert.equal(confirmed.branch.plan.actionIds.includes("bus_lanes"), false);
+  assert.equal(confirmed.branch.plan.actionIds.includes("digital_grant"), true);
+  assert.deepEqual(input, inputBefore);
+  assert.throws(() => confirmEvent({ ...input, removedActionId: "bus_lanes", addedActionId: "bus_fleet" }, catalog), (error) => error instanceof DomainError && error.code === "INVALID_EVENT_SWAP");
 });
