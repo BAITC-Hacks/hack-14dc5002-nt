@@ -2,168 +2,285 @@
   "ok": true,
   "data": {
     "plan": {
-      "modelVersion": "demo-v1",
-      "actionIds": [
-        "bus_lanes",
-        "lighting_smart",
-        "park_local",
-        "school_new",
-        "services_online"
+      "modelVersion": "organizer-v1",
+      "selections": [
+        {
+          "actionId": "M10",
+          "districtId": "nura"
+        },
+        {
+          "actionId": "M12"
+        },
+        {
+          "actionId": "M5",
+          "districtId": "saryarka"
+        },
+        {
+          "actionId": "M7",
+          "districtId": "nura"
+        },
+        {
+          "actionId": "M8",
+          "districtId": "nura"
+        }
       ]
     },
-    "totalCost": 90,
-    "remainingBudget": 10,
+    "totalCost": 95,
+    "remainingBudget": 5,
     "warnings": [],
     "valid": true,
-    "officialScore": 57.0,
+    "officialScore": 56.54306999999999,
     "errors": [],
     "metrics": {
-      "dimensions": {
-        "transport": 56.33333333333333,
-        "green": 51.99999999999999,
-        "social": 58.33333333333333,
-        "safety": 55.33333333333333,
-        "services": 62.99999999999999
+      "indicators": {
+        "T1": 47.31,
+        "T2": 63.98,
+        "E1": 53.11,
+        "E2": 59.29,
+        "S1": 54.98,
+        "S2": 58.85000000000001,
+        "B1": 65.1,
+        "B2": 55.50000000000001,
+        "C1": 58.5,
+        "C2": 64.215
+      },
+      "directions": {
+        "transport": 55.645,
+        "ecology": 56.509,
+        "social": 56.915,
+        "safety": 60.3,
+        "services": 61.3575
       },
       "districts": [
         {
-          "districtId": "D1",
+          "districtId": "esil",
+          "populationWeight": 0.27,
           "before": {
-            "transport": 45,
-            "green": 42,
-            "social": 46,
-            "safety": 44,
-            "services": 48
+            "T1": 45,
+            "T2": 62,
+            "E1": 68,
+            "E2": 72,
+            "S1": 48,
+            "S2": 55,
+            "B1": 78,
+            "B2": 60,
+            "C1": 75,
+            "C2": 70
           },
           "after": {
-            "transport": 61,
-            "green": 57,
-            "social": 46,
-            "safety": 55,
-            "services": 63
+            "T1": 45,
+            "T2": 62,
+            "E1": 68,
+            "E2": 72,
+            "S1": 48,
+            "S2": 55,
+            "B1": 78,
+            "B2": 60,
+            "C1": 75,
+            "C2": 74.375
           },
-          "scoreBefore": 45.0,
-          "scoreAfter": 56.400000000000006,
-          "scoreDelta": 11.400000000000006
+          "scoreBefore": 62.99,
+          "scoreAfter": 63.4275,
+          "scoreDelta": 0.4375,
+          "criticalCountBefore": 0,
+          "criticalCountAfter": 0
         },
         {
-          "districtId": "D2",
+          "districtId": "almaty",
+          "populationWeight": 0.24,
           "before": {
-            "transport": 58,
-            "green": 50,
-            "social": 55,
-            "safety": 52,
-            "services": 55
+            "T1": 40,
+            "T2": 75,
+            "E1": 50,
+            "E2": 55,
+            "S1": 60,
+            "S2": 65,
+            "B1": 62,
+            "B2": 52,
+            "C1": 50,
+            "C2": 60
           },
           "after": {
-            "transport": 68,
-            "green": 49,
-            "social": 61,
-            "safety": 52,
-            "services": 67
+            "T1": 40,
+            "T2": 75,
+            "E1": 50,
+            "E2": 55,
+            "S1": 60,
+            "S2": 65,
+            "B1": 62,
+            "B2": 52,
+            "C1": 50,
+            "C2": 64.375
           },
-          "scoreBefore": 54.0,
-          "scoreAfter": 59.400000000000006,
-          "scoreDelta": 5.400000000000006
+          "scoreBefore": 57.059999999999995,
+          "scoreAfter": 57.497499999999995,
+          "scoreDelta": 0.4375,
+          "criticalCountBefore": 0,
+          "criticalCountAfter": 0
         },
         {
-          "districtId": "D3",
+          "districtId": "saryarka",
+          "populationWeight": 0.2,
           "before": {
-            "transport": 40,
-            "green": 38,
-            "social": 42,
-            "safety": 41,
-            "services": 43
+            "T1": 50,
+            "T2": 70,
+            "E1": 42,
+            "E2": 40,
+            "S1": 62,
+            "S2": 68,
+            "B1": 58,
+            "B2": 55,
+            "C1": 45,
+            "C2": 55
           },
           "after": {
-            "transport": 40,
-            "green": 50,
-            "social": 68,
-            "safety": 59,
-            "services": 59
+            "T1": 50,
+            "T2": 70,
+            "E1": 42,
+            "E2": 48.75,
+            "S1": 62,
+            "S2": 68,
+            "B1": 58,
+            "B2": 55,
+            "C1": 47.5,
+            "C2": 59.375
           },
-          "scoreBefore": 40.800000000000004,
-          "scoreAfter": 55.2,
-          "scoreDelta": 14.399999999999999
+          "scoreBefore": 54.650000000000006,
+          "scoreAfter": 56.3,
+          "scoreDelta": 1.6499999999999915,
+          "criticalCountBefore": 0,
+          "criticalCountAfter": 0
+        },
+        {
+          "districtId": "baikonur",
+          "populationWeight": 0.13,
+          "before": {
+            "T1": 52,
+            "T2": 68,
+            "E1": 55,
+            "E2": 50,
+            "S1": 58,
+            "S2": 60,
+            "B1": 52,
+            "B2": 58,
+            "C1": 55,
+            "C2": 58
+          },
+          "after": {
+            "T1": 52,
+            "T2": 68,
+            "E1": 55,
+            "E2": 50,
+            "S1": 58,
+            "S2": 60,
+            "B1": 52,
+            "B2": 58,
+            "C1": 55,
+            "C2": 62.375
+          },
+          "scoreBefore": 56.629999999999995,
+          "scoreAfter": 57.067499999999995,
+          "scoreDelta": 0.4375,
+          "criticalCountBefore": 0,
+          "criticalCountAfter": 0
+        },
+        {
+          "districtId": "nura",
+          "populationWeight": 0.16,
+          "before": {
+            "T1": 55,
+            "T2": 40,
+            "E1": 45,
+            "E2": 65,
+            "S1": 38,
+            "S2": 35,
+            "B1": 55,
+            "B2": 50,
+            "C1": 60,
+            "C2": 50
+          },
+          "after": {
+            "T1": 55,
+            "T2": 40,
+            "E1": 45,
+            "E2": 65,
+            "S1": 48,
+            "S2": 43.75,
+            "B1": 67.5,
+            "B2": 51.75,
+            "C1": 60,
+            "C2": 54.375
+          },
+          "scoreBefore": 49.18000000000001,
+          "scoreAfter": 52.962500000000006,
+          "scoreDelta": 3.782499999999999,
+          "criticalCountBefore": 2,
+          "criticalCountAfter": 0
         }
       ],
-      "baselineOfficialScore": 46.6,
-      "deltaFromBaseline": 10.399999999999999
+      "populationWeightedAverage": 58.07759999999999,
+      "weakestDistrictScore": 52.962500000000006,
+      "criticalCount": 0,
+      "baselineOfficialScore": 52.557680000000005,
+      "deltaFromBaseline": 3.985389999999988,
+      "synergiesApplied": [
+        {
+          "actionIds": [
+            "M10",
+            "M12"
+          ],
+          "districtId": "nura",
+          "indicator": "B1",
+          "bonus": 2
+        }
+      ]
     },
     "trace": [
       {
-        "actionId": "bus_lanes",
-        "active": true,
-        "lagMonths": 2,
+        "actionId": "M10",
+        "districtId": "nura",
+        "lagQuarters": 1,
+        "effectMultiplier": 0.875,
         "appliedEffects": {
-          "D1": {
-            "transport": 16,
-            "green": -2
-          },
-          "D2": {
-            "transport": 10,
-            "green": -1
-          }
+          "B1": 10.5,
+          "B2": 1.75
         }
       },
       {
-        "actionId": "lighting_smart",
-        "active": true,
-        "lagMonths": 1,
+        "actionId": "M12",
+        "districtId": null,
+        "lagQuarters": 1,
+        "effectMultiplier": 0.875,
         "appliedEffects": {
-          "D3": {
-            "safety": 18,
-            "services": 2
-          },
-          "D1": {
-            "safety": 8,
-            "green": -1
-          }
+          "C2": 4.375
         }
       },
       {
-        "actionId": "park_local",
-        "active": true,
-        "lagMonths": 3,
+        "actionId": "M5",
+        "districtId": "saryarka",
+        "lagQuarters": 3,
+        "effectMultiplier": 0.625,
         "appliedEffects": {
-          "D1": {
-            "green": 18,
-            "safety": 3
-          },
-          "D3": {
-            "green": 12
-          }
+          "E2": 8.75,
+          "C1": 2.5
         }
       },
       {
-        "actionId": "school_new",
-        "active": true,
-        "lagMonths": 6,
+        "actionId": "M7",
+        "districtId": "nura",
+        "lagQuarters": 3,
+        "effectMultiplier": 0.625,
         "appliedEffects": {
-          "D3": {
-            "social": 24,
-            "services": 4
-          },
-          "D2": {
-            "social": 6
-          }
+          "S1": 10
         }
       },
       {
-        "actionId": "services_online",
-        "active": true,
-        "lagMonths": 1,
+        "actionId": "M8",
+        "districtId": "nura",
+        "lagQuarters": 3,
+        "effectMultiplier": 0.625,
         "appliedEffects": {
-          "D1": {
-            "services": 15
-          },
-          "D2": {
-            "services": 12
-          },
-          "D3": {
-            "services": 10,
-            "social": 2
-          }
+          "S2": 8.75
         }
       }
     ]

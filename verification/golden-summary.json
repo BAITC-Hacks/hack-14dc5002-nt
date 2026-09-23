@@ -1,43 +1,15 @@
 {
-  "baseScore": 57.0,
-  "baseScoreDisplay": "57.0",
-  "newScore": 56.60000000000001,
-  "newScoreDisplay": "56.6",
-  "scoreDelta": -0.3999999999999915,
-  "baseCost": 90,
-  "draftCost": 60,
-  "availableAfterCancellation": 40,
-  "replacementCost": 36,
-  "newCost": 96,
-  "cancellationOptions": [
-    {
-      "add": "bus_fleet",
-      "cost": 84,
-      "score": 56.599999999999994
-    },
-    {
-      "add": "school_modular",
-      "cost": 96,
-      "score": 56.60000000000001
-    },
-    {
-      "add": "service_centers",
-      "cost": 78,
-      "score": 56.53333333333333
-    }
-  ],
-  "opportunityOptions": [
-    {
-      "remove": "bus_lanes",
-      "score": 58.66666666666667
-    },
-    {
-      "remove": "lighting_smart",
-      "score": 58.400000000000006
-    },
-    {
-      "remove": "park_local",
-      "score": 58.0
-    }
-  ]
+  "modelVersion": "organizer-v1",
+  "baselineScore": 52.55768,
+  "baselinePopulationWeightedAverage": 56.8624,
+  "baselineWeakestDistrictScore": 49.18,
+  "baselineCriticalCount": 2,
+  "sampleCost": 95,
+  "populationWeightedAverage": 58.0776,
+  "weakestDistrictScore": 52.9625,
+  "criticalCount": 0,
+  "score": 56.54307,
+  "displayScore": "56.5",
+  "delta": 3.98539,
+  "synergy": { "actionIds": ["M10", "M12"], "districtId": "nura", "indicator": "B1", "bonus": 2 }
 }

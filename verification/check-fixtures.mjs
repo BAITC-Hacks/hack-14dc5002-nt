@@ -1,97 +1,53 @@
-/** Offline fixture/math check. This is NOT the application's engine or API. */
-import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-const root = new URL('../', import.meta.url);
-const load = async (path) => JSON.parse(await readFile(new URL(path, root), 'utf8'));
-const catalog = await load('src/data/catalog.json');
-const dims = Object.keys(catalog.config.dimensionWeights);
-const actions = new Map(catalog.actions.map((a) => [a.id, a]));
-const events = new Map(catalog.events.map((e) => [e.id, e]));
-const districtIds = new Set(catalog.districts.map((d) => d.id));
+/** Offline regression check for the organizer-provided catalog and deterministic engine. */
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { simulatePlan, validatePlan } from "../src/lib/simulation/index.ts";
+
+const root = new URL("../", import.meta.url);
+const catalog = JSON.parse(await readFile(new URL("src/data/catalog.json", root), "utf8"));
+const mockCatalog = JSON.parse(await readFile(new URL("src/mocks/catalog.json", root), "utf8"));
+const requests = JSON.parse(await readFile(new URL("src/mocks/requests.json", root), "utf8"));
+const golden = JSON.parse(await readFile(new URL("verification/golden-summary.json", root), "utf8"));
 let checks = 0;
-const check = (condition, message) => { assert.ok(condition, message); checks += 1; };
-const close = (actual, expected, message) => {
-  check(Number.isFinite(actual) && Math.abs(actual - expected) < 1e-6, message);
-};
-close(catalog.districts.reduce((s, d) => s + d.weight, 0), 1, 'district weights');
-close(Object.values(catalog.config.dimensionWeights).reduce((s, v) => s + v, 0), 1, 'dimension weights');
-check(actions.size === catalog.actions.length, 'unique action IDs');
-check(events.size === catalog.events.length, 'unique event IDs');
-for (const a of actions.values()) {
-  check(Number.isFinite(a.cost) && a.cost >= 0, 'finite nonnegative cost');
-  check(Number.isFinite(a.lagMonths) && a.lagMonths >= 0, 'finite nonnegative lag');
-  for (const id of [...a.constraints.requires, ...a.constraints.excludes]) check(actions.has(id), 'valid action reference');
-  for (const [district, values] of Object.entries(a.effects)) {
-    check(districtIds.has(district), 'known effect district');
-    for (const [dimension, amount] of Object.entries(values)) check(dims.includes(dimension) && Number.isFinite(amount), 'valid effect');
-  }
-  if (a.availability.kind === 'event') check(events.has(a.availability.eventId), 'known availability event');
+const check = (condition, description) => { assert.ok(condition, description); checks += 1; };
+const close = (actual, expected, description) => check(Number.isFinite(actual) && Math.abs(actual - expected) < 1e-6, description);
+
+check(catalog.config.modelVersion === "organizer-v1", "organizer model version");
+check(catalog.districts.length === 5, "five source districts");
+check(catalog.actions.length === 14, "fourteen source actions");
+check(catalog.events.length === 0, "no invented events");
+check(JSON.stringify(mockCatalog) === JSON.stringify(catalog), "mock catalog mirrors server catalog");
+close(catalog.districts.reduce((sum, district) => sum + district.populationWeight, 0), 1, "population weights total one");
+close(Object.values(catalog.config.indicatorWeights).reduce((sum, weight) => sum + weight, 0), 1, "indicator weights total one");
+check(new Set(catalog.actions.map((action) => action.id)).size === 14, "unique action IDs");
+const baseline = simulatePlan({ modelVersion: catalog.config.modelVersion, selections: [] }, catalog);
+check(!baseline.valid && baseline.officialScore === null, "empty selection has no score");
+const result = simulatePlan(catalog.demoPlan, catalog);
+const validMock = JSON.parse(await readFile(new URL("src/mocks/simulate.valid.json", root), "utf8")).data;
+check(JSON.stringify(validMock) === JSON.stringify(result), "valid simulation mock is produced by engine");
+check(result.valid, "golden plan valid");
+close(result.totalCost, 95, "golden plan price");
+close(result.metrics.baselineOfficialScore, golden.baselineScore, "baseline Score");
+close(result.metrics.populationWeightedAverage, golden.populationWeightedAverage, "result population average");
+close(result.metrics.weakestDistrictScore, golden.weakestDistrictScore, "result weakest district");
+check(result.metrics.criticalCount === golden.criticalCount, "result critical count");
+close(result.officialScore, golden.score, "golden Score");
+close(result.metrics.deltaFromBaseline, golden.delta, "Score delta");
+check(result.metrics.synergiesApplied.length === 1 && result.metrics.synergiesApplied[0].districtId === "nura", "M10/M12 synergy district");
+check(validatePlan(catalog.demoPlan, catalog).length === 0, "golden plan passes validator");
+
+for (const count of [4, 6]) {
+  const selections = catalog.demoPlan.selections.slice(0, 5);
+  if (count === 4) selections.pop();
+  else selections.push({ actionId: "M1", districtId: "esil" });
+  const invalid = simulatePlan({ modelVersion: catalog.config.modelVersion, selections }, catalog);
+  check(!invalid.valid && invalid.officialScore === null && invalid.metrics === null && invalid.trace.length === 0, `${count} decisions invalid without score`);
+  const fixtureName = count === 4 ? "simulate.invalid-four.json" : "simulate.invalid-six.json";
+  const fixture = JSON.parse(await readFile(new URL(`src/mocks/${fixtureName}`, root), "utf8")).data;
+  check(JSON.stringify(fixture) === JSON.stringify(invalid), `${count}-decision mock is produced by engine`);
 }
-function evaluateValidFixture(result, eventId) {
-  check(result.valid === true, 'valid result expected');
-  check(result.plan.actionIds.length === 5, 'exactly five');
-  const ids = new Set(result.plan.actionIds);
-  check(ids.size === 5, 'unique five');
-  const selected = result.plan.actionIds.map((id) => actions.get(id));
-  check(selected.every(Boolean), 'known IDs');
-  const total = selected.reduce((s, a) => s + a.cost, 0);
-  close(result.totalCost, total, 'total cost');
-  check(total <= 100, 'within budget');
-  close(result.remainingBudget, 100 - total, 'remaining budget');
-  for (const a of selected) {
-    check(a.availability.kind === 'always' || a.availability.eventId === eventId, 'availability');
-    check(a.constraints.requires.every((id) => ids.has(id)), 'requirements');
-    check(a.constraints.excludes.every((id) => !ids.has(id)), 'exclusions');
-    const event = events.get(eventId);
-    check(!event || event.kind !== 'cancellation' || event.blockedActionId !== a.id, 'blocked action absent');
-  }
-  let totalScore = 0;
-  for (const district of catalog.districts) {
-    const districtResult = result.metrics.districts.find((d) => d.districtId === district.id);
-    let districtScore = 0;
-    for (const k of dims) {
-      const effect = selected.reduce((s, a) => s + (catalog.config.horizonMonths >= a.lagMonths ? (a.effects[district.id]?.[k] ?? 0) : 0), 0);
-      const metric = Math.max(0, Math.min(100, district.baseline[k] + effect));
-      close(districtResult.after[k], metric, 'district metric');
-      districtScore += metric * catalog.config.dimensionWeights[k];
-    }
-    close(districtResult.scoreAfter, districtScore, 'district score');
-    totalScore += districtScore * district.weight;
-  }
-  close(result.officialScore, totalScore, 'official score');
-}
-const base = (await load('src/mocks/simulate.valid.json')).data;
-evaluateValidFixture(base);
-for (const name of ['simulate.invalid-four', 'simulate.invalid-six']) {
-  const invalid = (await load(`src/mocks/${name}.json`)).data;
-  check(invalid.valid === false && invalid.officialScore === null && invalid.metrics === null, 'invalid plan has no score/metrics');
-  check(invalid.plan.actionIds.length !== 5, 'invalid count fixture');
-}
-for (const prefix of ['event', 'opportunity']) {
-  const preview = (await load(`src/mocks/${prefix}.preview.json`)).data;
-  const confirmed = (await load(`src/mocks/${prefix}.confirm.json`)).data;
-  check(JSON.stringify(preview.base) === JSON.stringify(base), 'preview preserves baseline');
-  check(JSON.stringify(confirmed.base) === JSON.stringify(base), 'confirm preserves baseline');
-  evaluateValidFixture(confirmed.branch, preview.event.id);
-  close(confirmed.comparison.scoreDelta, confirmed.branch.officialScore - base.officialScore, 'score comparison');
-  check(preview.replacementOptions.length <= 3, 'maximum three options');
-  let previous;
-  for (const option of preview.replacementOptions) {
-    evaluateValidFixture(option.result, preview.event.id);
-    close(option.comparison.scoreDelta, option.result.officialScore - base.officialScore, 'candidate delta');
-    check(base.plan.actionIds.includes(option.removedActionId), 'removes existing action');
-    check(!base.plan.actionIds.includes(option.addedActionId), 'adds new action');
-    const key = Math.round(option.result.officialScore * 1e9);
-    if (previous) check(previous.key > key || (previous.key === key && previous.cost <= option.result.totalCost), 'stable score/cost order');
-    previous = { key, cost: option.result.totalCost };
-  }
-}
-const cancel = (await load('src/mocks/event.preview.json')).data;
-check(cancel.draft.actionIds.length === 4 && cancel.draftResult.officialScore === null, 'cancellation draft');
-close(cancel.draftResult.remainingBudget, 40, 'replacement budget includes old remainder');
-const golden = await load('verification/golden-summary.json');
-close(base.officialScore, golden.baseScore, 'golden baseline');
-const confirmed = (await load('src/mocks/event.confirm.json')).data;
-close(confirmed.branch.officialScore, golden.newScore, 'golden changed score');
-close(confirmed.branch.totalCost, 96, 'replacement cost greater than cancelled action still fits');
-console.log(`PASS: ${checks} fixture/catalog/math assertions. No application, HTTP, browser, or live AI tests were run.`);
+check(requests.simulateValid.modelVersion === catalog.config.modelVersion, "mock request uses current model version");
+check(requests.simulateValid.selections.length === 5, "mock request includes five selections");
+check(JSON.stringify(requests.simulateValid) === JSON.stringify(catalog.demoPlan), "catalog demo request matches golden portfolio");
+
+console.log(`PASS: ${checks} organizer-v1 data/formula assertions.`);

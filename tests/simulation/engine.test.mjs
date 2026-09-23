@@ -5,21 +5,27 @@ import { DomainError, validatePlan, simulatePlan, previewEvent, confirmEvent } f
 
 const root = new URL("../../", import.meta.url);
 const catalog = JSON.parse(await readFile(new URL("src/data/catalog.json", root), "utf8"));
-const demoPlan = catalog.demoPlan;
-const plan = (actionIds, modelVersion = catalog.config.modelVersion) => ({ modelVersion, actionIds });
+const plan = (selections, modelVersion = catalog.config.modelVersion) => ({ modelVersion, selections });
 const clone = (value) => structuredClone(value);
+const selection = (actionId, districtId) => districtId ? { actionId, districtId } : { actionId };
 const close = (actual, expected, tolerance = 1e-6) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} differs from ${expected}`);
 
-test("demo plan has five actions, costs 90, and scores 57.0", () => {
-  const result = simulatePlan(demoPlan, catalog);
+test("organizer example reproduces price, baseline, score, and fixed synergy", () => {
+  const result = simulatePlan(catalog.demoPlan, catalog);
   assert.equal(result.valid, true);
-  assert.equal(result.totalCost, 90);
-  close(result.officialScore, 57);
+  assert.equal(result.totalCost, 95);
+  close(result.metrics.baselineOfficialScore, 52.55768);
+  close(result.metrics.populationWeightedAverage, 58.0776);
+  close(result.metrics.weakestDistrictScore, 52.9625);
+  assert.equal(result.metrics.criticalCount, 0);
+  close(result.officialScore, 56.54307);
+  close(result.metrics.deltaFromBaseline, 3.98539);
+  assert.deepEqual(result.metrics.synergiesApplied, [{ actionIds: ["M10", "M12"], districtId: "nura", indicator: "B1", bonus: 2 }]);
 });
 
-test("four and six actions remain invalid without an official result", () => {
-  for (const ids of [demoPlan.actionIds.slice(0, 4), [...demoPlan.actionIds, "bus_fleet"]]) {
-    const result = simulatePlan(plan(ids), catalog);
+test("four or six decisions never receive a partial Score", () => {
+  for (const selections of [catalog.demoPlan.selections.slice(0, 4), [...catalog.demoPlan.selections, selection("M1", "esil")]]) {
+    const result = simulatePlan(plan(selections), catalog);
     assert.equal(result.valid, false);
     assert.equal(result.officialScore, null);
     assert.equal(result.metrics, null);
@@ -27,175 +33,110 @@ test("four and six actions remain invalid without an official result", () => {
   }
 });
 
-test("exact budget limit is accepted; exceeding it is rejected", () => {
+test("budget limit is inclusive and over-budget portfolios are invalid", () => {
   const custom = clone(catalog);
-  const ids = ["bus_lanes", "park_local", "school_new", "lighting_smart", "services_online"];
-  const five = new Set(ids);
-  let assigned = false;
-  for (const action of custom.actions) {
-    if (five.has(action.id) && !assigned) { action.cost += 10; assigned = true; break; }
-  }
-  const atLimit = simulatePlan(plan(ids), custom);
+  const selections = catalog.demoPlan.selections;
+  custom.actions.find((action) => action.id === "M5").cost = 30;
+  const atLimit = simulatePlan(plan(selections), custom);
   assert.equal(atLimit.totalCost, 100);
   assert.equal(atLimit.valid, true);
-  custom.actions.find((action) => action.id === "bus_lanes").cost += 1;
-  const over = simulatePlan(plan(ids), custom);
+  custom.actions.find((action) => action.id === "M5").cost = 31;
+  const over = simulatePlan(plan(selections), custom);
   assert.equal(over.valid, false);
   assert.ok(over.errors.some((entry) => entry.code === "BUDGET_EXCEEDED"));
 });
 
-test("duplicates and unknown IDs are errors and only known unique IDs count toward cost", () => {
-  const duplicated = simulatePlan(plan(["bus_lanes", "bus_lanes", "park_local", "school_new", "lighting_smart"]), catalog);
+test("duplicates and unknown measures are rejected without inflating invalid cost", () => {
+  const duplicated = simulatePlan(plan([selection("M7", "nura"), selection("M7", "nura"), selection("M10", "nura"), selection("M12"), selection("M5", "saryarka")]), catalog);
   assert.equal(duplicated.valid, false);
   assert.ok(duplicated.errors.some((entry) => entry.code === "DUPLICATE_ACTION"));
-  assert.equal(duplicated.totalCost, 76);
-  const unknown = simulatePlan(plan(["bus_lanes", "park_local", "school_new", "lighting_smart", "not-real"]), catalog);
+  assert.equal(duplicated.totalCost, 75);
+  const unknown = simulatePlan(plan([selection("M7", "nura"), selection("M10", "nura"), selection("M12"), selection("M5", "saryarka"), selection("M99", "nura")]), catalog);
   assert.equal(unknown.valid, false);
   assert.ok(unknown.errors.some((entry) => entry.code === "UNKNOWN_ACTION"));
-  assert.equal(unknown.totalCost, 76);
+  assert.equal(unknown.totalCost, 75);
 });
 
-test("model version, requires, and exclusions are enforced in both directions", () => {
-  assert.ok(validatePlan(plan(demoPlan.actionIds, "other-model"), catalog).some((entry) => entry.code === "MODEL_VERSION_MISMATCH"));
-  const missingRequires = clone(catalog);
-  missingRequires.actions.find((action) => action.id === "bus_fleet").constraints.requires = ["park_local"];
-  assert.ok(validatePlan(plan(["bus_lanes", "bus_fleet", "school_new", "lighting_smart", "services_online"]), missingRequires).some((entry) => entry.code === "REQUIREMENT_MISSING"));
-  const bothSchools = plan(["bus_lanes", "school_new", "school_modular", "lighting_smart", "services_online"]);
-  assert.ok(validatePlan(bothSchools, catalog).filter((entry) => entry.code === "ACTIONS_INCOMPATIBLE").length >= 2);
+test("district targets are required for district actions and forbidden for city actions", () => {
+  const missing = clone(catalog.demoPlan);
+  missing.selections[0] = selection("M7");
+  assert.ok(validatePlan(missing, catalog).some((entry) => entry.code === "DISTRICT_REQUIRED"));
+  const cityTarget = clone(catalog.demoPlan);
+  cityTarget.selections.find((item) => item.actionId === "M12").districtId = "nura";
+  assert.ok(validatePlan(cityTarget, catalog).some((entry) => entry.code === "DISTRICT_NOT_ALLOWED"));
+  const badDistrict = clone(catalog.demoPlan);
+  badDistrict.selections[0].districtId = "unknown";
+  assert.ok(validatePlan(badDistrict, catalog).some((entry) => entry.code === "UNKNOWN_DISTRICT"));
 });
 
-test("event-only action requires matching event context", () => {
-  const withGrant = plan(["bus_lanes", "digital_grant", "park_local", "school_new", "services_online"]);
-  assert.ok(validatePlan(withGrant, catalog).some((entry) => entry.code === "ACTION_UNAVAILABLE"));
-  assert.equal(validatePlan(withGrant, catalog, "digital_grant_available").length, 0);
+test("direction limit is two; five decisions therefore span at least three directions", () => {
+  const tooMany = plan([selection("M1", "esil"), selection("M2"), selection("M3", "almaty"), selection("M10", "nura"), selection("M12")]);
+  const errors = validatePlan(tooMany, catalog);
+  assert.ok(errors.some((entry) => entry.code === "DIRECTION_LIMIT_EXCEEDED"));
+  assert.equal(validatePlan(catalog.demoPlan, catalog).length, 0);
 });
 
-test("lag is stepwise: inactive before horizon, active at and after lag", () => {
+test("global and same-district conflicts follow their distinct scopes", () => {
+  const globalConflict = plan([selection("M1", "esil"), selection("M3", "nura"), selection("M7", "nura"), selection("M10", "almaty"), selection("M12")]);
+  assert.ok(validatePlan(globalConflict, catalog).some((entry) => entry.code === "ACTIONS_INCOMPATIBLE"));
+  const localConflict = plan([selection("M4", "nura"), selection("M7", "nura"), selection("M10", "esil"), selection("M12"), selection("M5", "saryarka")]);
+  assert.ok(validatePlan(localConflict, catalog).some((entry) => entry.code === "ACTIONS_INCOMPATIBLE"));
+  const distinctDistricts = plan([selection("M4", "saryarka"), selection("M7", "nura"), selection("M9", "nura"), selection("M10", "almaty"), selection("M12")]);
+  assert.equal(validatePlan(distinctDistricts, catalog).length, 0);
+});
+
+test("linear lag scales effects; zero lag is full and lag eight is zero", () => {
+  const result = simulatePlan(catalog.demoPlan, catalog);
+  assert.equal(result.trace.find((item) => item.actionId === "M10").effectMultiplier, 7 / 8);
   const custom = clone(catalog);
-  custom.config.horizonMonths = 2;
-  const ids = ["bus_lanes", "green_longterm", "school_new", "lighting_smart", "services_online"];
-  const result = simulatePlan(plan(ids), custom);
-  assert.equal(result.valid, true);
-  const delayed = result.trace.find((entry) => entry.actionId === "green_longterm");
-  assert.equal(delayed.active, false);
-  custom.config.horizonMonths = 18;
-  const atLag = simulatePlan(plan(ids), custom);
-  assert.equal(atLag.trace.find((entry) => entry.actionId === "green_longterm").active, true);
-  custom.config.horizonMonths = 19;
-  const afterLag = simulatePlan(plan(ids), custom);
-  assert.equal(afterLag.trace.find((entry) => entry.actionId === "green_longterm").active, true);
+  custom.actions.find((item) => item.id === "M12").lagQuarters = 8;
+  const delayed = simulatePlan(catalog.demoPlan, custom);
+  assert.equal(delayed.trace.find((item) => item.actionId === "M12").effectMultiplier, 0);
+  assert.equal(delayed.trace.find((item) => item.actionId === "M12").appliedEffects.C2, undefined);
+  custom.actions.find((item) => item.id === "M12").lagQuarters = 0;
+  const immediate = simulatePlan(catalog.demoPlan, custom);
+  assert.equal(immediate.trace.find((item) => item.actionId === "M12").effectMultiplier, 1);
+  assert.equal(immediate.trace.find((item) => item.actionId === "M12").appliedEffects.C2, 5);
 });
 
-test("negative effects are applied and values clamp once after summing", () => {
+test("negative effects apply and clamping occurs once after all scaled effects sum", () => {
   const custom = clone(catalog);
-  custom.districts = [custom.districts[0]];
-  custom.districts[0].weight = 1;
-  custom.config.dimensionWeights = { transport: 1, green: 0, social: 0, safety: 0, services: 0 };
-  custom.actions = custom.actions.map((action) => ({ ...action, effects: {} }));
-  const actions = ["bus_lanes", "bus_fleet", "traffic_signals", "park_local", "tree_belts"];
-  for (const action of custom.actions) if (actions.includes(action.id)) action.effects = { D1: { transport: action.id === "bus_lanes" ? 40 : action.id === "bus_fleet" ? 30 : action.id === "traffic_signals" ? -80 : 0 } };
-  const result = simulatePlan(plan(actions), custom);
+  custom.districts[0].baseline.T1 = 99;
+  custom.actions.find((item) => item.id === "M2").effects = { T1: 4 };
+  custom.actions.find((item) => item.id === "M11").effects = { T1: -2 };
+  const customPlan = plan([selection("M2"), selection("M11", "esil"), selection("M4", "baikonur"), selection("M7", "almaty"), selection("M12")]);
+  const result = simulatePlan(customPlan, custom);
   assert.equal(result.valid, true);
-  assert.equal(result.metrics.districts[0].after.transport, 35);
-  const negativeTrace = result.trace.find((entry) => entry.actionId === "traffic_signals");
-  assert.equal(negativeTrace.appliedEffects.D1.transport, -80);
-  custom.actions.find((action) => action.id === "bus_fleet").effects.D1.transport = 100;
-  custom.actions.find((action) => action.id === "traffic_signals").effects.D1.transport = -10;
-  const clamped = simulatePlan(plan(actions), custom);
-  assert.equal(clamped.metrics.districts[0].after.transport, 100);
+  assert.equal(result.metrics.districts.find((item) => item.districtId === "esil").after.T1, 100);
+  assert.equal(result.trace.find((item) => item.actionId === "M11").appliedEffects.T1, -1.75);
 });
 
-test("order does not affect result, and neither plan nor catalog is mutated", () => {
-  const input = plan([...demoPlan.actionIds].reverse());
-  const inputBefore = clone(input);
-  const catalogBefore = clone(catalog);
+test("critical threshold is strict: 39.999 counts while 40 does not", () => {
+  const custom = clone(catalog);
+  custom.districts[0].baseline.T1 = 40;
+  const before = simulatePlan(custom.demoPlan, custom);
+  assert.equal(before.metrics.districts.find((item) => item.districtId === "esil").criticalCountBefore, 0);
+  custom.districts[0].baseline.T1 = 39.999;
+  const below = simulatePlan(custom.demoPlan, custom);
+  assert.equal(below.metrics.districts.find((item) => item.districtId === "esil").criticalCountBefore, 1);
+});
+
+test("changing selection order does not change results and inputs are never mutated", () => {
+  const input = clone(catalog.demoPlan);
+  input.selections.reverse();
+  const beforePlan = clone(input);
+  const beforeCatalog = clone(catalog);
   const first = simulatePlan(input, catalog);
-  const second = simulatePlan(plan([...input.actionIds].reverse()), catalog);
-  assert.deepEqual(first, second);
-  assert.deepEqual(input, inputBefore);
-  assert.deepEqual(catalog, catalogBefore);
-  assert.deepEqual(first.plan.actionIds, [...demoPlan.actionIds].sort((a, b) => a.localeCompare(b)));
+  const reordered = simulatePlan(plan([...input.selections].reverse()), catalog);
+  assert.deepEqual(first, reordered);
+  assert.deepEqual(input, beforePlan);
+  assert.deepEqual(catalog, beforeCatalog);
 });
 
-test("malformed catalogue is rejected", () => {
+test("catalog validation rejects invalid weights and event endpoints are explicit about missing event data", () => {
   const custom = clone(catalog);
-  custom.districts[0].weight = -1;
-  assert.ok(validatePlan(demoPlan, custom).some((entry) => entry.code === "INVALID_CATALOG"));
-});
-
-test("cancellation preview preserves base, returns a four-action draft, and uses freed budget", () => {
-  const input = { basePlan: clone(demoPlan), eventId: "school_site_unavailable" };
-  const inputBefore = clone(input);
-  const baseSnapshot = simulatePlan(input.basePlan, catalog);
-  const preview = previewEvent(input, catalog);
-  assert.equal(preview.base.totalCost, 90);
-  close(preview.base.officialScore, 57);
-  assert.equal(preview.draft.actionIds.length, 4);
-  assert.equal(preview.draftResult.valid, false);
-  assert.equal(preview.draftResult.officialScore, null);
-  assert.equal(preview.draftResult.metrics, null);
-  assert.equal(preview.draftResult.remainingBudget, 40);
-  assert.ok(preview.replacementOptions.length <= 3);
-  assert.ok(preview.replacementOptions.every((option) => option.result.valid && option.plan.actionIds.length === 5));
-  assert.ok(preview.replacementOptions.some((option) => option.addedActionId === "school_modular" && option.result.totalCost === 96));
-  const modular = preview.replacementOptions.find((option) => option.addedActionId === "school_modular");
-  close(modular.result.officialScore, 56.6);
-  assert.deepEqual(input, inputBefore);
-  assert.deepEqual(preview.base, baseSnapshot);
-});
-
-test("cancellation confirmation recalculates selected replacement and comparison", () => {
-  const input = { basePlan: clone(demoPlan), eventId: "school_site_unavailable", removedActionId: "school_new", addedActionId: "school_modular" };
-  const original = clone(input);
-  const baseSnapshot = simulatePlan(input.basePlan, catalog);
-  const result = confirmEvent(input, catalog);
-  assert.equal(result.base.totalCost, 90);
-  close(result.base.officialScore, 57);
-  assert.equal(result.branch.totalCost, 96);
-  close(result.branch.officialScore, 56.6);
-  close(result.comparison.scoreDelta, -0.4);
-  assert.deepEqual(input, original);
-  assert.deepEqual(result.base, baseSnapshot);
-});
-
-test("events reject unknown, inapplicable, malformed, and inconsistent swaps", () => {
-  assert.throws(() => previewEvent({ basePlan: demoPlan, eventId: "no-such-event" }, catalog), (error) => error instanceof DomainError && error.code === "UNKNOWN_EVENT");
-  const otherBase = plan(["bus_lanes", "bus_fleet", "park_local", "lighting_smart", "services_online"]);
-  assert.throws(() => previewEvent({ basePlan: otherBase, eventId: "school_site_unavailable" }, catalog), (error) => error instanceof DomainError && error.code === "EVENT_NOT_APPLICABLE");
-  assert.throws(() => confirmEvent({ basePlan: demoPlan, eventId: "school_site_unavailable", removedActionId: "park_local", addedActionId: "bus_fleet" }, catalog), (error) => error instanceof DomainError && error.code === "INVALID_EVENT_SWAP");
-  assert.throws(() => confirmEvent({ basePlan: demoPlan, eventId: "school_site_unavailable", removedActionId: "school_new", addedActionId: "school_new" }, catalog), (error) => error instanceof DomainError && error.code === "INVALID_EVENT_SWAP");
-});
-
-test("cancellation offers no invalid or unaffordable alternatives", () => {
-  const custom = clone(catalog);
-  for (const action of custom.actions) if (!demoPlan.actionIds.includes(action.id)) action.cost = 1000;
-  const preview = previewEvent({ basePlan: demoPlan, eventId: "school_site_unavailable" }, custom);
-  assert.deepEqual(preview.replacementOptions, []);
-});
-
-test("equal recommendation scores have deterministic cost and ID ordering", () => {
-  const custom = clone(catalog);
-  for (const action of custom.actions) {
-    action.cost = 10;
-    action.effects = {};
-  }
-  const preview = previewEvent({ basePlan: demoPlan, eventId: "school_site_unavailable" }, custom);
-  assert.deepEqual(preview.replacementOptions.map((option) => option.addedActionId), ["bus_fleet", "classes_rental", "clinic_outreach"]);
-});
-
-test("opportunity replaces one existing action and confirms only the unlocked action", () => {
-  const input = { basePlan: clone(demoPlan), eventId: "digital_grant_available" };
-  const inputBefore = clone(input);
-  const preview = previewEvent(input, catalog);
-  assert.equal(preview.draftResult.valid, true);
-  assert.equal(preview.draft.actionIds.length, 5);
-  assert.ok(preview.replacementOptions.every((option) => option.plan.actionIds.length === 5 && option.addedActionId === "digital_grant"));
-  assert.ok(preview.replacementOptions.length <= 3);
-  const confirmed = confirmEvent({ ...input, removedActionId: "bus_lanes", addedActionId: "digital_grant" }, catalog);
-  assert.equal(confirmed.branch.valid, true);
-  assert.equal(confirmed.branch.plan.actionIds.length, 5);
-  assert.equal(confirmed.branch.plan.actionIds.includes("bus_lanes"), false);
-  assert.equal(confirmed.branch.plan.actionIds.includes("digital_grant"), true);
-  assert.deepEqual(input, inputBefore);
-  assert.throws(() => confirmEvent({ ...input, removedActionId: "bus_lanes", addedActionId: "bus_fleet" }, catalog), (error) => error instanceof DomainError && error.code === "INVALID_EVENT_SWAP");
+  custom.districts[0].populationWeight = -1;
+  assert.ok(validatePlan(catalog.demoPlan, custom).some((entry) => entry.code === "INVALID_CATALOG"));
+  assert.throws(() => previewEvent({ basePlan: catalog.demoPlan, eventId: "anything" }, catalog), (error) => error instanceof DomainError && error.code === "EVENTS_NOT_CONFIGURED");
+  assert.throws(() => confirmEvent({ basePlan: catalog.demoPlan, eventId: "anything", removedActionId: "M7", addedActionId: "M2" }, catalog), (error) => error instanceof DomainError && error.code === "EVENTS_NOT_CONFIGURED");
 });

@@ -2,25 +2,54 @@
   "ok": true,
   "data": {
     "plan": {
-      "modelVersion": "demo-v1",
-      "actionIds": [
-        "bus_lanes",
-        "lighting_smart",
-        "park_local",
-        "safe_crossings",
-        "school_new",
-        "services_online"
+      "modelVersion": "organizer-v1",
+      "selections": [
+        {
+          "actionId": "M7",
+          "districtId": "nura"
+        },
+        {
+          "actionId": "M8",
+          "districtId": "nura"
+        },
+        {
+          "actionId": "M10",
+          "districtId": "nura"
+        },
+        {
+          "actionId": "M12"
+        },
+        {
+          "actionId": "M5",
+          "districtId": "saryarka"
+        },
+        {
+          "actionId": "M1",
+          "districtId": "esil"
+        }
       ]
     },
-    "totalCost": 100,
-    "remainingBudget": 0,
+    "totalCost": 113,
+    "remainingBudget": -13,
     "warnings": [],
     "valid": false,
     "officialScore": null,
     "errors": [
       {
-        "code": "DECISION_COUNT",
-        "message": "Нужно выбрать ровно пять мероприятий.",
+        "code": "INVALID_DECISION_COUNT",
+        "message": "Нужно принять ровно 5 решений.",
+        "actionIds": [
+          "M7",
+          "M8",
+          "M10",
+          "M12",
+          "M5",
+          "M1"
+        ]
+      },
+      {
+        "code": "BUDGET_EXCEEDED",
+        "message": "Стоимость 113 превышает бюджет 100.",
         "actionIds": []
       }
     ],

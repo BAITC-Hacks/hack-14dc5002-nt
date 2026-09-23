@@ -1,18 +1,16 @@
-/** Shared contract v1. Only participant 3 may change this file after team agreement.
- * This is a proposed hackathon model, NOT an official Astana scoring standard.
- * All indicators are normalized: larger values mean better outcomes.
- */
-export const DIRECTIONS = [
-  "transport", "green", "social", "safety", "services",
-] as const;
+/** Contract for the organizer-provided synthetic hackathon dataset (model v2). */
+export const DIRECTIONS = ["transport", "ecology", "social", "safety", "services"] as const;
 export type Direction = (typeof DIRECTIONS)[number];
-export type Metrics = Record<Direction, number>;
-export type Effects = Record<string, Partial<Metrics>>;
+
+export const INDICATORS = ["T1", "T2", "E1", "E2", "S1", "S2", "B1", "B2", "C1", "C2"] as const;
+export type Indicator = (typeof INDICATORS)[number];
+export type Metrics = Record<Indicator, number>;
+export type Effects = Partial<Metrics>;
 
 export interface District {
   id: string;
   name: string;
-  weight: number;
+  populationWeight: number;
   baseline: Metrics;
 }
 export interface Action {
@@ -20,39 +18,52 @@ export interface Action {
   title: string;
   description: string;
   direction: Direction;
+  scope: "district" | "city";
   cost: number;
-  lagMonths: number;
+  lagQuarters: number;
   effects: Effects;
-  constraints: { requires: string[]; excludes: string[] };
-  availability: { kind: "always" } | { kind: "event"; eventId: string };
+  constraints: { requires: string[] };
 }
-export type CityEvent = {
-  id: string;
-  title: string;
-  description: string;
-} & (
-  | { kind: "cancellation"; blockedActionId: string }
-  | { kind: "opportunity"; unlockedActionId: string }
-);
+export interface ActionConflict {
+  actionIds: [string, string];
+  scope: "global" | "same-district";
+}
+export interface Synergy {
+  actionIds: [string, string];
+  indicator: Indicator;
+  bonus: number;
+  districtActionId: string;
+}
 export interface ModelConfig {
   modelVersion: string;
   budgetLimit: number;
   decisionsRequired: number;
-  horizonMonths: number;
-  lagRule: "step";
-  dimensionWeights: Metrics;
-  dataMode: "synthetic" | "organizer";
+  horizonQuarters: number;
+  lagRule: "linear-remaining-horizon";
+  indicatorWeights: Metrics;
+  populationAverageWeight: number;
+  weakestDistrictWeight: number;
+  criticalThreshold: number;
+  criticalPenalty: number;
+  maxActionsPerDirection: number;
+  dataMode: "organizer-synthetic";
   disclaimer: string;
+}
+export interface PlanSelection {
+  actionId: string;
+  districtId?: string;
 }
 export interface PlanInput {
   modelVersion: string;
-  actionIds: string[];
+  selections: PlanSelection[];
 }
 export interface Catalog {
   config: ModelConfig;
   districts: District[];
   actions: Action[];
-  events: CityEvent[];
+  conflicts: ActionConflict[];
+  synergies: Synergy[];
+  events: [];
   demoPlan: PlanInput;
 }
 export interface ValidationIssue {
@@ -62,16 +73,20 @@ export interface ValidationIssue {
 }
 export interface DistrictResult {
   districtId: string;
+  populationWeight: number;
   before: Metrics;
   after: Metrics;
   scoreBefore: number;
   scoreAfter: number;
   scoreDelta: number;
+  criticalCountBefore: number;
+  criticalCountAfter: number;
 }
 export interface ActionTrace {
   actionId: string;
-  active: boolean;
-  lagMonths: number;
+  districtId: string | null;
+  lagQuarters: number;
+  effectMultiplier: number;
   appliedEffects: Effects;
 }
 interface SimulationCommon {
@@ -85,10 +100,15 @@ export interface ValidSimulation extends SimulationCommon {
   officialScore: number;
   errors: [];
   metrics: {
-    dimensions: Metrics;
+    indicators: Metrics;
+    directions: Record<Direction, number>;
     districts: DistrictResult[];
+    populationWeightedAverage: number;
+    weakestDistrictScore: number;
+    criticalCount: number;
     baselineOfficialScore: number;
     deltaFromBaseline: number;
+    synergiesApplied: { actionIds: [string, string]; districtId: string; indicator: Indicator; bonus: number }[];
   };
   trace: ActionTrace[];
 }
@@ -102,13 +122,13 @@ export interface InvalidSimulation extends SimulationCommon {
 export type SimulationResult = ValidSimulation | InvalidSimulation;
 export interface Comparison {
   scoreDelta: number;
-  dimensionsDelta: Metrics;
-  districts: {
-    districtId: string;
-    scoreDelta: number;
-    dimensionsDelta: Metrics;
-  }[];
+  indicatorsDelta: Metrics;
+  districts: { districtId: string; scoreDelta: number; indicatorsDelta: Metrics }[];
 }
+
+// Events remain optional in the assignment; the supplied organizer dataset defines none.
+export interface EventPreviewInput { basePlan: PlanInput; eventId: string; }
+export interface EventConfirmInput extends EventPreviewInput { removedActionId: string; addedActionId: string; }
 export interface ReplacementOption {
   removedActionId: string;
   addedActionId: string;
@@ -116,45 +136,28 @@ export interface ReplacementOption {
   result: ValidSimulation;
   comparison: Comparison;
 }
-export interface EventPreviewInput {
-  basePlan: PlanInput;
-  eventId: string;
-}
 export interface EventPreviewResult {
   base: ValidSimulation;
-  event: CityEvent;
+  event: never;
   draft: PlanInput;
   draftResult: SimulationResult;
   requiresReplacement: true;
   replacementOptions: ReplacementOption[];
 }
-export interface EventConfirmInput extends EventPreviewInput {
-  removedActionId: string;
-  addedActionId: string;
-}
 export interface EventConfirmResult {
   base: ValidSimulation;
-  event: CityEvent;
+  event: never;
   branch: ValidSimulation;
   comparison: Comparison;
 }
-export type ExplainInput =
-  | { kind: "base"; plan: PlanInput }
-  | { kind: "event"; change: EventConfirmInput };
+export type ExplainInput = { kind: "base"; plan: PlanInput } | { kind: "event"; change: EventConfirmInput };
 export interface Explanation {
   source: "ai" | "template";
   summary: string;
-  observations: {
-    actionIds: string[];
-    districtIds: string[];
-    text: string;
-  }[];
+  observations: { actionIds: string[]; districtIds: string[]; text: string }[];
   tradeoff: string;
   limitation: string;
 }
 export type ApiResponse<T> =
   | { ok: true; data: T }
-  | {
-      ok: false;
-      error: { code: string; message: string; issues?: ValidationIssue[] };
-    };
+  | { ok: false; error: { code: string; message: string; issues?: ValidationIssue[] } };

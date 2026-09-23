@@ -1,487 +1,61 @@
 {
   "config": {
-    "modelVersion": "demo-v1",
+    "modelVersion": "organizer-v1",
     "budgetLimit": 100,
     "decisionsRequired": 5,
-    "horizonMonths": 12,
-    "lagRule": "step",
-    "dimensionWeights": {
-      "transport": 0.2,
-      "green": 0.2,
-      "social": 0.2,
-      "safety": 0.2,
-      "services": 0.2
-    },
-    "dataMode": "synthetic",
-    "disclaimer": "Демонстрационная модель: синтетические данные и условные районы D1–D3. Не официальная статистика, не административное деление и не прогноз Астаны."
+    "horizonQuarters": 8,
+    "lagRule": "linear-remaining-horizon",
+    "indicatorWeights": { "T1": 0.10, "T2": 0.10, "E1": 0.09, "E2": 0.11, "S1": 0.11, "S2": 0.11, "B1": 0.09, "B2": 0.09, "C1": 0.10, "C2": 0.10 },
+    "populationAverageWeight": 0.7,
+    "weakestDistrictWeight": 0.3,
+    "criticalThreshold": 40,
+    "criticalPenalty": 1,
+    "maxActionsPerDirection": 2,
+    "dataMode": "organizer-synthetic",
+    "disclaimer": "Синтетические данные условных районов и расчетная модель хакатона. Значения не являются официальной статистикой или прогнозом города."
   },
   "districts": [
-    {
-      "id": "D1",
-      "name": "Демо-район Север",
-      "weight": 0.3333333333333333,
-      "baseline": {
-        "transport": 45,
-        "green": 42,
-        "social": 46,
-        "safety": 44,
-        "services": 48
-      }
-    },
-    {
-      "id": "D2",
-      "name": "Демо-район Центр",
-      "weight": 0.3333333333333333,
-      "baseline": {
-        "transport": 58,
-        "green": 50,
-        "social": 55,
-        "safety": 52,
-        "services": 55
-      }
-    },
-    {
-      "id": "D3",
-      "name": "Демо-район Юг",
-      "weight": 0.3333333333333333,
-      "baseline": {
-        "transport": 40,
-        "green": 38,
-        "social": 42,
-        "safety": 41,
-        "services": 43
-      }
-    }
+    { "id": "esil", "name": "Есиль", "populationWeight": 0.27, "baseline": { "T1": 45, "T2": 62, "E1": 68, "E2": 72, "S1": 48, "S2": 55, "B1": 78, "B2": 60, "C1": 75, "C2": 70 } },
+    { "id": "almaty", "name": "Алматы", "populationWeight": 0.24, "baseline": { "T1": 40, "T2": 75, "E1": 50, "E2": 55, "S1": 60, "S2": 65, "B1": 62, "B2": 52, "C1": 50, "C2": 60 } },
+    { "id": "saryarka", "name": "Сарыарка", "populationWeight": 0.20, "baseline": { "T1": 50, "T2": 70, "E1": 42, "E2": 40, "S1": 62, "S2": 68, "B1": 58, "B2": 55, "C1": 45, "C2": 55 } },
+    { "id": "baikonur", "name": "Байконур", "populationWeight": 0.13, "baseline": { "T1": 52, "T2": 68, "E1": 55, "E2": 50, "S1": 58, "S2": 60, "B1": 52, "B2": 58, "C1": 55, "C2": 58 } },
+    { "id": "nura", "name": "Нура", "populationWeight": 0.16, "baseline": { "T1": 55, "T2": 40, "E1": 45, "E2": 65, "S1": 38, "S2": 35, "B1": 55, "B2": 50, "C1": 60, "C2": 50 } }
   ],
   "actions": [
-    {
-      "id": "bus_lanes",
-      "title": "Выделенные автобусные полосы",
-      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
-      "direction": "transport",
-      "cost": 18,
-      "lagMonths": 2,
-      "effects": {
-        "D1": {
-          "transport": 16,
-          "green": -2
-        },
-        "D2": {
-          "transport": 10,
-          "green": -1
-        }
-      },
-      "constraints": {
-        "requires": [],
-        "excludes": []
-      },
-      "availability": {
-        "kind": "always"
-      }
-    },
-    {
-      "id": "bus_fleet",
-      "title": "Обновление автобусного парка",
-      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
-      "direction": "transport",
-      "cost": 24,
-      "lagMonths": 4,
-      "effects": {
-        "D1": {
-          "transport": 10,
-          "green": 3
-        },
-        "D3": {
-          "transport": 12,
-          "green": 3
-        }
-      },
-      "constraints": {
-        "requires": [],
-        "excludes": []
-      },
-      "availability": {
-        "kind": "always"
-      }
-    },
-    {
-      "id": "traffic_signals",
-      "title": "Настройка светофоров",
-      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
-      "direction": "transport",
-      "cost": 14,
-      "lagMonths": 1,
-      "effects": {
-        "D1": {
-          "transport": 8,
-          "safety": 3
-        },
-        "D2": {
-          "transport": 8,
-          "safety": 3
-        }
-      },
-      "constraints": {
-        "requires": [],
-        "excludes": []
-      },
-      "availability": {
-        "kind": "always"
-      }
-    },
-    {
-      "id": "park_local",
-      "title": "Озеленение общественных пространств",
-      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
-      "direction": "green",
-      "cost": 16,
-      "lagMonths": 3,
-      "effects": {
-        "D1": {
-          "green": 18,
-          "safety": 3
-        },
-        "D3": {
-          "green": 12
-        }
-      },
-      "constraints": {
-        "requires": [],
-        "excludes": []
-      },
-      "availability": {
-        "kind": "always"
-      }
-    },
-    {
-      "id": "tree_belts",
-      "title": "Защитные зеленые полосы",
-      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
-      "direction": "green",
-      "cost": 20,
-      "lagMonths": 6,
-      "effects": {
-        "D1": {
-          "green": 12
-        },
-        "D2": {
-          "green": 8
-        },
-        "D3": {
-          "green": 7
-        }
-      },
-      "constraints": {
-        "requires": [],
-        "excludes": []
-      },
-      "availability": {
-        "kind": "always"
-      }
-    },
-    {
-      "id": "green_longterm",
-      "title": "Долгосрочный городской лес",
-      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
-      "direction": "green",
-      "cost": 18,
-      "lagMonths": 18,
-      "effects": {
-        "D1": {
-          "green": 25
-        },
-        "D3": {
-          "green": 25
-        }
-      },
-      "constraints": {
-        "requires": [],
-        "excludes": []
-      },
-      "availability": {
-        "kind": "always"
-      }
-    },
-    {
-      "id": "school_new",
-      "title": "Строительство школы",
-      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
-      "direction": "social",
-      "cost": 30,
-      "lagMonths": 6,
-      "effects": {
-        "D3": {
-          "social": 24,
-          "services": 4
-        },
-        "D2": {
-          "social": 6
-        }
-      },
-      "constraints": {
-        "requires": [],
-        "excludes": [
-          "school_modular"
-        ]
-      },
-      "availability": {
-        "kind": "always"
-      }
-    },
-    {
-      "id": "school_modular",
-      "title": "Модульные учебные корпуса",
-      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
-      "direction": "social",
-      "cost": 36,
-      "lagMonths": 3,
-      "effects": {
-        "D3": {
-          "social": 22,
-          "services": 3
-        },
-        "D2": {
-          "social": 3
-        }
-      },
-      "constraints": {
-        "requires": [],
-        "excludes": [
-          "school_new"
-        ]
-      },
-      "availability": {
-        "kind": "always"
-      }
-    },
-    {
-      "id": "classes_rental",
-      "title": "Аренда помещений под учебные классы",
-      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
-      "direction": "social",
-      "cost": 22,
-      "lagMonths": 0,
-      "effects": {
-        "D3": {
-          "social": 17,
-          "services": 2
-        },
-        "D2": {
-          "social": 2
-        }
-      },
-      "constraints": {
-        "requires": [],
-        "excludes": []
-      },
-      "availability": {
-        "kind": "always"
-      }
-    },
-    {
-      "id": "clinic_outreach",
-      "title": "Выездные медицинские бригады",
-      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
-      "direction": "social",
-      "cost": 20,
-      "lagMonths": 1,
-      "effects": {
-        "D3": {
-          "social": 13
-        },
-        "D1": {
-          "social": 7,
-          "services": 4
-        }
-      },
-      "constraints": {
-        "requires": [],
-        "excludes": []
-      },
-      "availability": {
-        "kind": "always"
-      }
-    },
-    {
-      "id": "lighting_smart",
-      "title": "Освещение безопасных маршрутов",
-      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
-      "direction": "safety",
-      "cost": 12,
-      "lagMonths": 1,
-      "effects": {
-        "D3": {
-          "safety": 18,
-          "services": 2
-        },
-        "D1": {
-          "safety": 8,
-          "green": -1
-        }
-      },
-      "constraints": {
-        "requires": [],
-        "excludes": []
-      },
-      "availability": {
-        "kind": "always"
-      }
-    },
-    {
-      "id": "safe_crossings",
-      "title": "Безопасные пешеходные переходы",
-      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
-      "direction": "safety",
-      "cost": 10,
-      "lagMonths": 1,
-      "effects": {
-        "D1": {
-          "safety": 10,
-          "transport": -2
-        },
-        "D3": {
-          "safety": 12
-        }
-      },
-      "constraints": {
-        "requires": [],
-        "excludes": []
-      },
-      "availability": {
-        "kind": "always"
-      }
-    },
-    {
-      "id": "safety_sensors",
-      "title": "Датчики состояния освещения",
-      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
-      "direction": "safety",
-      "cost": 8,
-      "lagMonths": 2,
-      "effects": {
-        "D1": {
-          "safety": 5
-        },
-        "D3": {
-          "safety": 7
-        }
-      },
-      "constraints": {
-        "requires": [
-          "lighting_smart"
-        ],
-        "excludes": []
-      },
-      "availability": {
-        "kind": "always"
-      }
-    },
-    {
-      "id": "services_online",
-      "title": "Городские услуги онлайн",
-      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
-      "direction": "services",
-      "cost": 14,
-      "lagMonths": 1,
-      "effects": {
-        "D1": {
-          "services": 15
-        },
-        "D2": {
-          "services": 12
-        },
-        "D3": {
-          "services": 10,
-          "social": 2
-        }
-      },
-      "constraints": {
-        "requires": [],
-        "excludes": []
-      },
-      "availability": {
-        "kind": "always"
-      }
-    },
-    {
-      "id": "service_centers",
-      "title": "Мобильные центры обслуживания",
-      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
-      "direction": "services",
-      "cost": 18,
-      "lagMonths": 2,
-      "effects": {
-        "D1": {
-          "services": 10
-        },
-        "D2": {
-          "services": 5
-        },
-        "D3": {
-          "services": 12
-        }
-      },
-      "constraints": {
-        "requires": [],
-        "excludes": []
-      },
-      "availability": {
-        "kind": "always"
-      }
-    },
-    {
-      "id": "digital_grant",
-      "title": "Грантовая программа цифровых услуг",
-      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
-      "direction": "services",
-      "cost": 8,
-      "lagMonths": 0,
-      "effects": {
-        "D1": {
-          "services": 15
-        },
-        "D2": {
-          "services": 15
-        },
-        "D3": {
-          "services": 15,
-          "social": 3
-        }
-      },
-      "constraints": {
-        "requires": [],
-        "excludes": []
-      },
-      "availability": {
-        "kind": "event",
-        "eventId": "digital_grant_available"
-      }
-    }
+    { "id": "M1", "title": "Выделенные полосы для автобусов", "description": "Районная мера: разгрузка дорог и доступность общественного транспорта.", "direction": "transport", "scope": "district", "cost": 18, "lagQuarters": 2, "effects": { "T1": 6, "T2": 9 }, "constraints": { "requires": [] } },
+    { "id": "M2", "title": "Умные светофоры (адаптивное управление)", "description": "Городская мера: разгрузка дорог и безопасность дорожного движения.", "direction": "transport", "scope": "city", "cost": 22, "lagQuarters": 2, "effects": { "T1": 4, "B2": 3 }, "constraints": { "requires": [] } },
+    { "id": "M3", "title": "Линия ЛРТ / расширение", "description": "Районная мера: транспортная доступность и влияние на качество воздуха.", "direction": "transport", "scope": "district", "cost": 30, "lagQuarters": 4, "effects": { "T1": 16, "T2": 20, "E2": 4 }, "constraints": { "requires": [] } },
+    { "id": "M4", "title": "Парк / сквер", "description": "Районная мера: озеленение, качество воздуха и безопасность улиц.", "direction": "ecology", "scope": "district", "cost": 15, "lagQuarters": 2, "effects": { "E1": 12, "E2": 3, "B1": 2 }, "constraints": { "requires": [] } },
+    { "id": "M5", "title": "Перевод частного сектора на чистое топливо", "description": "Районная мера: качество воздуха и надежность ЖКХ.", "direction": "ecology", "scope": "district", "cost": 25, "lagQuarters": 3, "effects": { "E2": 14, "C1": 4 }, "constraints": { "requires": [] } },
+    { "id": "M6", "title": "Городская программа озеленения и ветрозащитных полос", "description": "Городская мера: озеленение и качество воздуха.", "direction": "ecology", "scope": "city", "cost": 20, "lagQuarters": 4, "effects": { "E1": 5, "E2": 3 }, "constraints": { "requires": [] } },
+    { "id": "M7", "title": "Школа + детсад (модульное строительство)", "description": "Районная мера: обеспеченность школами и детскими садами.", "direction": "social", "scope": "district", "cost": 24, "lagQuarters": 3, "effects": { "S1": 16 }, "constraints": { "requires": [] } },
+    { "id": "M8", "title": "Центр семейного здоровья / поликлиника", "description": "Районная мера: доступность первичной медицинской помощи.", "direction": "social", "scope": "district", "cost": 20, "lagQuarters": 3, "effects": { "S2": 14 }, "constraints": { "requires": [] } },
+    { "id": "M9", "title": "Дворовые спорт-хабы", "description": "Районная мера: социальная инфраструктура и безопасность улиц.", "direction": "social", "scope": "district", "cost": 10, "lagQuarters": 1, "effects": { "S1": 3, "S2": 3, "B1": 3 }, "constraints": { "requires": [] } },
+    { "id": "M10", "title": "Освещение и камеры (расширение Safe City)", "description": "Районная мера: безопасность улиц и дорожного движения.", "direction": "safety", "scope": "district", "cost": 12, "lagQuarters": 1, "effects": { "B1": 12, "B2": 2 }, "constraints": { "requires": [] } },
+    { "id": "M11", "title": "Безопасные переходы и школьные зоны", "description": "Районная мера: безопасность дорожного движения.", "direction": "safety", "scope": "district", "cost": 10, "lagQuarters": 1, "effects": { "B2": 12, "T1": -2 }, "constraints": { "requires": [] } },
+    { "id": "M12", "title": "Единая цифровая платформа обращений", "description": "Городская мера: скорость решения обращений жителей.", "direction": "services", "scope": "city", "cost": 14, "lagQuarters": 1, "effects": { "C2": 5 }, "constraints": { "requires": [] } },
+    { "id": "M13", "title": "Модернизация тепло- и водосетей", "description": "Районная мера: надежность ЖКХ и качество воздуха.", "direction": "services", "scope": "district", "cost": 28, "lagQuarters": 4, "effects": { "C1": 18, "E2": 2 }, "constraints": { "requires": [] } },
+    { "id": "M14", "title": "Аварийные бригады ЖКХ + раннее оповещение", "description": "Городская мера: надежность ЖКХ и скорость реакции на обращения.", "direction": "services", "scope": "city", "cost": 16, "lagQuarters": 1, "effects": { "C1": 5, "C2": 2 }, "constraints": { "requires": [] } }
   ],
-  "events": [
-    {
-      "id": "school_site_unavailable",
-      "title": "Строительство школы отменено: участок недоступен",
-      "description": "Учебный сценарий: план еще не исполнен; вся стоимость школы возвращается в бюджет ветки.",
-      "kind": "cancellation",
-      "blockedActionId": "school_new"
-    },
-    {
-      "id": "digital_grant_available",
-      "title": "Открылась грантовая программа цифровых услуг",
-      "description": "Предварительно описанный проект стал доступен. Он должен заменить одно из пяти мероприятий.",
-      "kind": "opportunity",
-      "unlockedActionId": "digital_grant"
-    }
+  "conflicts": [
+    { "actionIds": ["M1", "M3"], "scope": "global" },
+    { "actionIds": ["M4", "M7"], "scope": "same-district" },
+    { "actionIds": ["M5", "M13"], "scope": "same-district" }
   ],
+  "synergies": [
+    { "actionIds": ["M1", "M2"], "indicator": "T1", "bonus": 2, "districtActionId": "M1" },
+    { "actionIds": ["M10", "M12"], "indicator": "B1", "bonus": 2, "districtActionId": "M10" },
+    { "actionIds": ["M5", "M6"], "indicator": "E2", "bonus": 2, "districtActionId": "M5" }
+  ],
+  "events": [],
   "demoPlan": {
-    "modelVersion": "demo-v1",
-    "actionIds": [
-      "bus_lanes",
-      "school_new",
-      "park_local",
-      "lighting_smart",
-      "services_online"
+    "modelVersion": "organizer-v1",
+    "selections": [
+      { "actionId": "M7", "districtId": "nura" },
+      { "actionId": "M8", "districtId": "nura" },
+      { "actionId": "M10", "districtId": "nura" },
+      { "actionId": "M12" },
+      { "actionId": "M5", "districtId": "saryarka" }
     ]
   }
 }

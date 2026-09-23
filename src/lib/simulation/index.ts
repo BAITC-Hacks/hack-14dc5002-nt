@@ -1,18 +1,20 @@
-import { DIRECTIONS } from "../../contracts/index.ts";
+import { DIRECTIONS, INDICATORS } from "../../contracts/index.ts";
 import type {
-  Action, Catalog, Comparison, DistrictResult, EventConfirmInput,
-  EventConfirmResult, EventPreviewInput, EventPreviewResult, Metrics,
-  PlanInput, ReplacementOption, SimulationResult, ValidSimulation,
-  ValidationIssue,
+  Action, Catalog, Direction, EventConfirmInput, EventConfirmResult,
+  EventPreviewInput, EventPreviewResult, Indicator, Metrics, PlanInput,
+  SimulationResult, ValidSimulation, ValidationIssue,
 } from "../../contracts/index.ts";
 
 const EPSILON = 1e-9;
-const lexical = (left: string, right: string) => left < right ? -1 : left > right ? 1 : 0;
+const lexical = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
+const INDICATOR_DIRECTION: Record<Indicator, Direction> = {
+  T1: "transport", T2: "transport", E1: "ecology", E2: "ecology",
+  S1: "social", S2: "social", B1: "safety", B2: "safety", C1: "services", C2: "services",
+};
 
 export class DomainError extends Error {
   readonly code: string;
   readonly issues: ValidationIssue[];
-
   constructor(code: string, message: string, issues: ValidationIssue[] = []) {
     super(message);
     this.name = "DomainError";
@@ -21,289 +23,204 @@ export class DomainError extends Error {
   }
 }
 
-function issue(code: string, message: string, actionIds: string[] = []): ValidationIssue {
-  return { code, message, actionIds };
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
+const makeIssue = (code: string, message: string, actionIds: string[] = []): ValidationIssue => ({ code, message, actionIds });
+const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+const blankMetrics = (): Metrics => Object.fromEntries(INDICATORS.map((key) => [key, 0])) as Metrics;
 
 function catalogIssues(catalog: Catalog): ValidationIssue[] {
+  if (!catalog || !catalog.config || !Array.isArray(catalog.actions) || !Array.isArray(catalog.districts) || !Array.isArray(catalog.conflicts) || !Array.isArray(catalog.synergies)) {
+    return [makeIssue("INVALID_CATALOG", "Каталог имеет неверную структуру.")];
+  }
   const errors: ValidationIssue[] = [];
-  if (!catalog || typeof catalog !== "object" || !catalog.config || !Array.isArray(catalog.actions) || !Array.isArray(catalog.districts) || !Array.isArray(catalog.events)) {
-    return [issue("INVALID_CATALOG", "Каталог имеет неверную структуру.")];
+  const actionIds = new Set(catalog.actions.map((action) => action.id));
+  const districtIds = new Set(catalog.districts.map((district) => district.id));
+  if (actionIds.size !== catalog.actions.length || districtIds.size !== catalog.districts.length) errors.push(makeIssue("INVALID_CATALOG", "ID мероприятий и районов должны быть уникальны."));
+  const cfg = catalog.config;
+  if (!cfg.modelVersion || !finite(cfg.budgetLimit) || cfg.budgetLimit < 0 || !Number.isInteger(cfg.decisionsRequired) || cfg.decisionsRequired <= 0 || !finite(cfg.horizonQuarters) || cfg.horizonQuarters <= 0 || cfg.lagRule !== "linear-remaining-horizon" || !finite(cfg.criticalThreshold) || !finite(cfg.criticalPenalty) || cfg.criticalPenalty < 0 || !Number.isInteger(cfg.maxActionsPerDirection) || cfg.maxActionsPerDirection <= 0 || !finite(cfg.populationAverageWeight) || !finite(cfg.weakestDistrictWeight) || cfg.populationAverageWeight < 0 || cfg.weakestDistrictWeight < 0 || Math.abs(cfg.populationAverageWeight + cfg.weakestDistrictWeight - 1) > EPSILON) {
+    errors.push(makeIssue("INVALID_CATALOG", "Настройки модели или веса Score некорректны."));
   }
-  const actionIds = new Set<string>();
-  const districtIds = new Set<string>();
-  const eventIds = new Set<string>();
-  for (const action of catalog.actions) {
-    if (!action || typeof action.id !== "string" || !action.id) {
-      errors.push(issue("INVALID_CATALOG", "У мероприятия отсутствует корректный ID."));
-    } else if (actionIds.has(action.id)) {
-      errors.push(issue("INVALID_CATALOG", `ID мероприятия ${action.id} повторяется.`, [action.id]));
-    } else actionIds.add(action.id);
-  }
+  const indicatorWeightSum = INDICATORS.reduce((sum, key) => sum + (cfg.indicatorWeights?.[key] ?? Number.NaN), 0);
+  if (INDICATORS.some((key) => !finite(cfg.indicatorWeights?.[key]) || cfg.indicatorWeights[key] < 0) || Math.abs(indicatorWeightSum - 1) > EPSILON) errors.push(makeIssue("INVALID_CATALOG", "Веса показателей должны быть неотрицательными и суммироваться до 1."));
+  const populationWeightSum = catalog.districts.reduce((sum, district) => sum + district.populationWeight, 0);
+  if (catalog.districts.some((district) => !finite(district.populationWeight) || district.populationWeight < 0) || Math.abs(populationWeightSum - 1) > EPSILON) errors.push(makeIssue("INVALID_CATALOG", "Веса населения районов должны быть неотрицательными и суммироваться до 1."));
   for (const district of catalog.districts) {
-    if (!district || typeof district.id !== "string" || !district.id) {
-      errors.push(issue("INVALID_CATALOG", "У района отсутствует корректный ID."));
-      continue;
-    }
-    if (districtIds.has(district.id)) errors.push(issue("INVALID_CATALOG", `ID района ${district.id} повторяется.`));
-    districtIds.add(district.id);
-    if (!isFiniteNumber(district.weight) || district.weight < 0) errors.push(issue("INVALID_CATALOG", `Некорректный вес района ${district.id}.`));
-    for (const direction of DIRECTIONS) {
-      if (!isFiniteNumber(district.baseline?.[direction])) errors.push(issue("INVALID_CATALOG", `Некорректная база ${district.id}/${direction}.`));
-    }
-  }
-  for (const event of catalog.events) {
-    if (!event || typeof event.id !== "string" || !event.id) errors.push(issue("INVALID_CATALOG", "У события отсутствует корректный ID."));
-    else if (eventIds.has(event.id)) errors.push(issue("INVALID_CATALOG", `ID события ${event.id} повторяется.`));
-    else eventIds.add(event.id);
-  }
-  const config = catalog.config;
-  if (!config || typeof config.modelVersion !== "string" || !config.modelVersion || config.lagRule !== "step" || !isFiniteNumber(config.budgetLimit) || config.budgetLimit < 0 || !Number.isInteger(config.decisionsRequired) || config.decisionsRequired < 1 || !isFiniteNumber(config.horizonMonths) || config.horizonMonths < 0) {
-    errors.push(issue("INVALID_CATALOG", "Параметры модели каталога некорректны."));
-  }
-  const weightSum = (values: number[]) => values.reduce((sum, value) => sum + value, 0);
-  const dimensionWeights = DIRECTIONS.map((key) => config?.dimensionWeights?.[key]);
-  if (dimensionWeights.some((value) => !isFiniteNumber(value) || value < 0) || Math.abs(weightSum(dimensionWeights as number[]) - 1) > EPSILON) {
-    errors.push(issue("INVALID_CATALOG", "Веса показателей должны быть неотрицательными и в сумме равняться 1."));
-  }
-  if (Math.abs(weightSum(catalog.districts.map((district) => district.weight)) - 1) > EPSILON) {
-    errors.push(issue("INVALID_CATALOG", "Веса районов должны быть неотрицательными и в сумме равняться 1."));
+    if (INDICATORS.some((key) => !finite(district.baseline?.[key]) || district.baseline[key] < 0 || district.baseline[key] > 100)) errors.push(makeIssue("INVALID_CATALOG", `Некорректные исходные показатели района ${district.id}.`));
   }
   for (const action of catalog.actions) {
-    if (!action || typeof action.id !== "string") continue;
-    if (!isFiniteNumber(action.cost) || action.cost < 0 || !isFiniteNumber(action.lagMonths) || action.lagMonths < 0) errors.push(issue("INVALID_CATALOG", `Некорректная стоимость или лаг ${action.id}.`, [action.id]));
-    for (const [districtId, values] of Object.entries(action.effects ?? {})) {
-      if (!districtIds.has(districtId)) errors.push(issue("INVALID_CATALOG", `Эффект ${action.id} ссылается на неизвестный район ${districtId}.`, [action.id]));
-      for (const [key, value] of Object.entries(values ?? {})) {
-        if (!(DIRECTIONS as readonly string[]).includes(key) || !isFiniteNumber(value)) errors.push(issue("INVALID_CATALOG", `Некорректный эффект ${action.id}/${districtId}/${key}.`, [action.id]));
-      }
-    }
-    for (const linkedId of [...(action.constraints?.requires ?? []), ...(action.constraints?.excludes ?? [])]) {
-      if (!actionIds.has(linkedId)) errors.push(issue("INVALID_CATALOG", `Ограничение ${action.id} ссылается на неизвестное мероприятие ${linkedId}.`, [action.id, linkedId]));
-    }
-    if (action.availability?.kind === "event" && !eventIds.has(action.availability.eventId)) errors.push(issue("INVALID_CATALOG", `Доступность ${action.id} ссылается на неизвестное событие.`, [action.id]));
+    if (!finite(action.cost) || action.cost < 0 || !finite(action.lagQuarters) || action.lagQuarters < 0 || action.lagQuarters > cfg.horizonQuarters) errors.push(makeIssue("INVALID_CATALOG", `Некорректные стоимость или лаг меры ${action.id}.`, [action.id]));
+    if (!DIRECTIONS.includes(action.direction) || !["district", "city"].includes(action.scope)) errors.push(makeIssue("INVALID_CATALOG", `Некорректное направление или область меры ${action.id}.`, [action.id]));
+    for (const [key, value] of Object.entries(action.effects ?? {})) if (!INDICATORS.includes(key as Indicator) || !finite(value)) errors.push(makeIssue("INVALID_CATALOG", `Некорректный эффект меры ${action.id}/${key}.`, [action.id]));
+    for (const requiredId of action.constraints?.requires ?? []) if (!actionIds.has(requiredId)) errors.push(makeIssue("INVALID_CATALOG", `Мера ${action.id} требует неизвестную меру ${requiredId}.`, [action.id, requiredId]));
   }
-  for (const event of catalog.events) {
-    if (event.kind === "cancellation" && !actionIds.has(event.blockedActionId)) errors.push(issue("INVALID_CATALOG", `Событие ${event.id} ссылается на неизвестное мероприятие.`));
-    if (event.kind === "opportunity" && !actionIds.has(event.unlockedActionId)) errors.push(issue("INVALID_CATALOG", `Событие ${event.id} ссылается на неизвестное мероприятие.`));
-  }
+  for (const conflict of catalog.conflicts) if (conflict.actionIds.length !== 2 || conflict.actionIds.some((id) => !actionIds.has(id))) errors.push(makeIssue("INVALID_CATALOG", "Конфликт ссылается на неизвестную меру."));
+  for (const synergy of catalog.synergies) if (synergy.actionIds.some((id) => !actionIds.has(id)) || !actionIds.has(synergy.districtActionId) || !INDICATORS.includes(synergy.indicator) || !finite(synergy.bonus)) errors.push(makeIssue("INVALID_CATALOG", "Синергия содержит некорректную ссылку или значение."));
   return errors;
 }
 
-function uniqueKnownCost(ids: unknown, catalog: Catalog): number {
-  if (!Array.isArray(ids)) return 0;
-  const known = new Set<string>();
-  for (const id of ids) if (typeof id === "string") known.add(id);
-  return catalog.actions.reduce((sum, action) => sum + (known.has(action.id) && isFiniteNumber(action.cost) ? action.cost : 0), 0);
+function canonicalSelections(plan: PlanInput): PlanInput["selections"] {
+  return plan.selections.map((selection) => ({ ...selection })).sort((a, b) => lexical(a.actionId, b.actionId) || lexical(a.districtId ?? "", b.districtId ?? ""));
 }
 
-/** Validates a plan using catalog-owned prices, availability, and constraints. */
-export function validatePlan(plan: PlanInput, catalog: Catalog, eventId?: string): ValidationIssue[] {
+/** Validates exact decision count, budget, target districts, directions, conflicts and requirements. */
+export function validatePlan(plan: PlanInput, catalog: Catalog): ValidationIssue[] {
   const errors = catalogIssues(catalog);
   if (errors.length) return errors;
-  if (!plan || typeof plan !== "object" || !Array.isArray(plan.actionIds)) return [issue("INVALID_PLAN", "План должен содержать список мероприятий.")];
-  const ids = plan.actionIds;
-  if (plan.modelVersion !== catalog.config.modelVersion) errors.push(issue("MODEL_VERSION_MISMATCH", "Версия модели плана не совпадает с каталогом."));
-  if (ids.length !== catalog.config.decisionsRequired) errors.push(issue("INVALID_DECISION_COUNT", `Нужно выбрать ровно ${catalog.config.decisionsRequired} мероприятий.`, ids.filter((id): id is string => typeof id === "string")));
+  if (!plan || !Array.isArray(plan.selections)) return [makeIssue("INVALID_PLAN", "План должен содержать список решений.")];
+  if (plan.modelVersion !== catalog.config.modelVersion) errors.push(makeIssue("MODEL_VERSION_MISMATCH", "Версия модели плана не совпадает с каталогом."));
+  const selections = plan.selections;
+  if (selections.length !== catalog.config.decisionsRequired) errors.push(makeIssue("INVALID_DECISION_COUNT", `Нужно принять ровно ${catalog.config.decisionsRequired} решений.`, selections.map((selection) => selection.actionId)));
+  const byId = new Map(catalog.actions.map((action) => [action.id, action]));
   const counts = new Map<string, number>();
-  for (const id of ids) {
-    if (typeof id !== "string") {
-      errors.push(issue("UNKNOWN_ACTION", "ID мероприятия должен быть строкой."));
-      continue;
-    }
-    counts.set(id, (counts.get(id) ?? 0) + 1);
+  for (const selection of selections) counts.set(selection.actionId, (counts.get(selection.actionId) ?? 0) + 1);
+  for (const [id, count] of counts) if (count > 1) errors.push(makeIssue("DUPLICATE_ACTION", `Мера ${id} выбрана более одного раза.`, [id]));
+  const selectedIds = new Set(counts.keys());
+  const districtById = new Map(catalog.districts.map((district) => [district.id, district]));
+  const selectionById = new Map(selections.map((selection) => [selection.actionId, selection]));
+  const directionCounts = new Map<Direction, number>();
+  for (const selection of selections) {
+    const action = byId.get(selection.actionId);
+    if (!action) { errors.push(makeIssue("UNKNOWN_ACTION", `Неизвестная мера ${selection.actionId}.`, [selection.actionId])); continue; }
+    directionCounts.set(action.direction, (directionCounts.get(action.direction) ?? 0) + 1);
+    if (action.scope === "district") {
+      if (!selection.districtId) errors.push(makeIssue("DISTRICT_REQUIRED", `Для меры ${action.id} необходимо выбрать район.`, [action.id]));
+      else if (!districtById.has(selection.districtId)) errors.push(makeIssue("UNKNOWN_DISTRICT", `Неизвестный район ${selection.districtId}.`, [action.id]));
+    } else if (selection.districtId !== undefined) errors.push(makeIssue("DISTRICT_NOT_ALLOWED", `Для городской меры ${action.id} район указывать нельзя.`, [action.id]));
+    for (const requiredId of action.constraints.requires) if (!selectedIds.has(requiredId)) errors.push(makeIssue("REQUIREMENT_MISSING", `${action.id} требует меру ${requiredId}.`, [action.id, requiredId]));
   }
-  const selected = new Set(counts.keys());
-  for (const [id, count] of counts) if (count > 1) errors.push(issue("DUPLICATE_ACTION", `Мероприятие ${id} выбрано несколько раз.`, [id]));
-  const actionById = new Map(catalog.actions.map((action) => [action.id, action]));
-  for (const id of selected) if (!actionById.has(id)) errors.push(issue("UNKNOWN_ACTION", `Неизвестное мероприятие ${id}.`, [id]));
-  const event = eventId ? catalog.events.find((candidate) => candidate.id === eventId) : undefined;
-  if (eventId && !event) errors.push(issue("UNKNOWN_EVENT", `Неизвестное событие ${eventId}.`));
-  for (const id of selected) {
-    const action = actionById.get(id);
-    if (!action) continue;
-    if (action.availability.kind === "event" && action.availability.eventId !== eventId) errors.push(issue("ACTION_UNAVAILABLE", `Мероприятие ${id} еще недоступно.`, [id]));
-    if (event?.kind === "cancellation" && event.blockedActionId === id) errors.push(issue("ACTION_BLOCKED", `Мероприятие ${id} заблокировано событием.`, [id]));
-    for (const requiredId of action.constraints.requires) if (!selected.has(requiredId)) errors.push(issue("REQUIREMENT_MISSING", `${id} требует ${requiredId}.`, [id, requiredId]));
-    for (const excludedId of action.constraints.excludes) if (selected.has(excludedId)) errors.push(issue("ACTIONS_INCOMPATIBLE", `${id} несовместимо с ${excludedId}.`, [id, excludedId]));
-    for (const otherId of selected) {
-      const other = actionById.get(otherId);
-      if (other && other.constraints.excludes.includes(id)) errors.push(issue("ACTIONS_INCOMPATIBLE", `${otherId} несовместимо с ${id}.`, [otherId, id]));
-    }
+  for (const [direction, count] of directionCounts) if (count > catalog.config.maxActionsPerDirection) errors.push(makeIssue("DIRECTION_LIMIT_EXCEEDED", `В направлении ${direction} выбрано больше ${catalog.config.maxActionsPerDirection} мер.`, selections.filter((selection) => byId.get(selection.actionId)?.direction === direction).map((selection) => selection.actionId)));
+  for (const conflict of catalog.conflicts) {
+    const [firstId, secondId] = conflict.actionIds;
+    if (!selectedIds.has(firstId) || !selectedIds.has(secondId)) continue;
+    if (conflict.scope === "global" || selectionById.get(firstId)?.districtId === selectionById.get(secondId)?.districtId) errors.push(makeIssue("ACTIONS_INCOMPATIBLE", `Меры ${firstId} и ${secondId} несовместимы${conflict.scope === "same-district" ? " в одном районе" : ""}.`, [firstId, secondId]));
   }
-  const totalCost = uniqueKnownCost(ids, catalog);
-  if (totalCost > catalog.config.budgetLimit) errors.push(issue("BUDGET_EXCEEDED", `Стоимость ${totalCost} превышает бюджет ${catalog.config.budgetLimit}.`));
+  const totalCost = selections.reduce((sum, selection) => sum + (byId.get(selection.actionId)?.cost ?? 0), 0);
+  if (totalCost > catalog.config.budgetLimit) errors.push(makeIssue("BUDGET_EXCEEDED", `Стоимость ${totalCost} превышает бюджет ${catalog.config.budgetLimit}.`));
   return errors;
 }
 
-function blankMetrics(): Metrics {
-  return { transport: 0, green: 0, social: 0, safety: 0, services: 0 };
+function districtScore(values: Metrics, catalog: Catalog): number {
+  return INDICATORS.reduce((sum, indicator) => sum + catalog.config.indicatorWeights[indicator] * values[indicator], 0);
+}
+
+function aggregate(districts: Catalog["districts"], values: Metrics[]): Metrics {
+  const result = blankMetrics();
+  for (const indicator of INDICATORS) result[indicator] = districts.reduce((sum, district, index) => sum + district.populationWeight * values[index][indicator], 0);
+  return result;
+}
+
+function scoreResult(values: Metrics[], catalog: Catalog) {
+  const districtScores = catalog.districts.map((district, index) => districtScore(values[index], catalog));
+  const populationWeightedAverage = districtScores.reduce((sum, score, index) => sum + catalog.districts[index].populationWeight * score, 0);
+  const weakestDistrictScore = Math.min(...districtScores);
+  const criticalCount = values.reduce((sum, districtValues) => sum + INDICATORS.filter((indicator) => districtValues[indicator] < catalog.config.criticalThreshold).length, 0);
+  return {
+    districtScores,
+    populationWeightedAverage,
+    weakestDistrictScore,
+    criticalCount,
+    score: catalog.config.populationAverageWeight * populationWeightedAverage + catalog.config.weakestDistrictWeight * weakestDistrictScore - catalog.config.criticalPenalty * criticalCount,
+  };
 }
 
 function calculateValid(plan: PlanInput, catalog: Catalog): ValidSimulation {
-  const ids = [...plan.actionIds].sort(lexical);
-  const canonicalPlan: PlanInput = { modelVersion: plan.modelVersion, actionIds: ids };
-  const actions = ids.map((id) => catalog.actions.find((action) => action.id === id) as Action);
-  const totalCost = actions.reduce((sum, action) => sum + action.cost, 0);
-  const trace = actions.map((action) => ({
-    actionId: action.id,
-    active: catalog.config.horizonMonths >= action.lagMonths,
-    lagMonths: action.lagMonths,
-    appliedEffects: action.effects,
-  }));
-  const districtResults: DistrictResult[] = catalog.districts.map((district) => {
-    const before = { ...district.baseline };
-    const after = blankMetrics();
-    for (const direction of DIRECTIONS) {
-      let value = district.baseline[direction];
-      for (const action of actions) {
-        if (catalog.config.horizonMonths < action.lagMonths) continue;
-        value += action.effects[district.id]?.[direction] ?? 0;
-      }
-      after[direction] = Math.min(100, Math.max(0, value));
+  const selections = canonicalSelections(plan);
+  const canonicalPlan: PlanInput = { modelVersion: plan.modelVersion, selections };
+  const actions = new Map(catalog.actions.map((action) => [action.id, action]));
+  const districts = catalog.districts;
+  const afterRaw = districts.map((district) => ({ ...district.baseline }));
+  const scaleFor = (action: Action) => (catalog.config.horizonQuarters - action.lagQuarters) / catalog.config.horizonQuarters;
+  const trace = [];
+  for (const selection of selections) {
+    const action = actions.get(selection.actionId)!;
+    const multiplier = scaleFor(action);
+    const targetDistricts = action.scope === "city" ? districts : districts.filter((district) => district.id === selection.districtId);
+    const appliedEffects: Partial<Metrics> = {};
+    for (const indicator of INDICATORS) {
+      const effect = (action.effects[indicator] ?? 0) * multiplier;
+      if (effect !== 0) appliedEffects[indicator] = effect;
+      for (const district of targetDistricts) afterRaw[districts.indexOf(district)][indicator] += effect;
     }
-    const scoreBefore = DIRECTIONS.reduce((sum, key) => sum + catalog.config.dimensionWeights[key] * before[key], 0);
-    const scoreAfter = DIRECTIONS.reduce((sum, key) => sum + catalog.config.dimensionWeights[key] * after[key], 0);
-    return { districtId: district.id, before, after, scoreBefore, scoreAfter, scoreDelta: scoreAfter - scoreBefore };
-  });
-  const dimensions = blankMetrics();
-  for (const direction of DIRECTIONS) dimensions[direction] = districtResults.reduce((sum, district, index) => sum + catalog.districts[index].weight * district.after[direction], 0);
-  const baselineOfficialScore = districtResults.reduce((sum, district, index) => sum + catalog.districts[index].weight * district.scoreBefore, 0);
-  const officialScore = districtResults.reduce((sum, district, index) => sum + catalog.districts[index].weight * district.scoreAfter, 0);
+    trace.push({ actionId: action.id, districtId: action.scope === "city" ? null : selection.districtId!, lagQuarters: action.lagQuarters, effectMultiplier: multiplier, appliedEffects });
+  }
+  const synergiesApplied: { actionIds: [string, string]; districtId: string; indicator: Indicator; bonus: number }[] = [];
+  const selectedIds = new Set(selections.map((selection) => selection.actionId));
+  const selectionById = new Map(selections.map((selection) => [selection.actionId, selection]));
+  for (const synergy of catalog.synergies) {
+    if (!synergy.actionIds.every((id) => selectedIds.has(id))) continue;
+    const anchorSelection = selectionById.get(synergy.districtActionId)!;
+    const districtId = anchorSelection.districtId!;
+    const districtIndex = districts.findIndex((district) => district.id === districtId);
+    afterRaw[districtIndex][synergy.indicator] += synergy.bonus;
+    synergiesApplied.push({ actionIds: [...synergy.actionIds], districtId, indicator: synergy.indicator, bonus: synergy.bonus });
+  }
+  const after = afterRaw.map((values) => Object.fromEntries(INDICATORS.map((indicator) => [indicator, Math.min(100, Math.max(0, values[indicator]))])) as Metrics);
+  const before = districts.map((district) => ({ ...district.baseline }));
+  const beforeScores = scoreResult(before, catalog);
+  const afterScores = scoreResult(after, catalog);
+  const districtResults = districts.map((district, index) => ({
+    districtId: district.id,
+    populationWeight: district.populationWeight,
+    before: before[index],
+    after: after[index],
+    scoreBefore: beforeScores.districtScores[index],
+    scoreAfter: afterScores.districtScores[index],
+    scoreDelta: afterScores.districtScores[index] - beforeScores.districtScores[index],
+    criticalCountBefore: INDICATORS.filter((indicator) => before[index][indicator] < catalog.config.criticalThreshold).length,
+    criticalCountAfter: INDICATORS.filter((indicator) => after[index][indicator] < catalog.config.criticalThreshold).length,
+  }));
+  const cityIndicators = aggregate(districts, after);
+  const directionWeights: Record<Direction, number> = { transport: 0, ecology: 0, social: 0, safety: 0, services: 0 };
+  const directionTotals: Record<Direction, number> = { ...directionWeights };
+  for (const indicator of INDICATORS) directionWeights[INDICATOR_DIRECTION[indicator]] += catalog.config.indicatorWeights[indicator] * cityIndicators[indicator];
+  for (const indicator of INDICATORS) directionTotals[INDICATOR_DIRECTION[indicator]] += catalog.config.indicatorWeights[indicator];
+  for (const direction of DIRECTIONS) directionWeights[direction] /= directionTotals[direction];
+  const totalCost = selections.reduce((sum, selection) => sum + actions.get(selection.actionId)!.cost, 0);
   return {
     plan: canonicalPlan,
     totalCost,
     remainingBudget: catalog.config.budgetLimit - totalCost,
     warnings: [],
     valid: true,
-    officialScore,
+    officialScore: afterScores.score,
     errors: [],
-    metrics: { dimensions, districts: districtResults, baselineOfficialScore, deltaFromBaseline: officialScore - baselineOfficialScore },
+    metrics: {
+      indicators: cityIndicators,
+      directions: directionWeights,
+      districts: districtResults,
+      populationWeightedAverage: afterScores.populationWeightedAverage,
+      weakestDistrictScore: afterScores.weakestDistrictScore,
+      criticalCount: afterScores.criticalCount,
+      baselineOfficialScore: beforeScores.score,
+      deltaFromBaseline: afterScores.score - beforeScores.score,
+      synergiesApplied,
+    },
     trace,
   };
 }
 
-/** Simulates valid five-action plans; invalid plans never receive a Score. */
-export function simulatePlan(plan: PlanInput, catalog: Catalog, eventId?: string): SimulationResult {
-  const errors = validatePlan(plan, catalog, eventId);
-  const totalCost = uniqueKnownCost(plan?.actionIds, catalog);
+/** Calculates only a valid five-decision plan; invalid plans have no Score. */
+export function simulatePlan(plan: PlanInput, catalog: Catalog): SimulationResult {
+  const errors = validatePlan(plan, catalog);
+  const actionMap = new Map((catalog?.actions ?? []).map((action) => [action.id, action]));
+  const uniqueIds = new Set(plan?.selections?.map((selection) => selection.actionId) ?? []);
+  const totalCost = [...uniqueIds].reduce((sum, id) => sum + (actionMap.get(id)?.cost ?? 0), 0);
   if (errors.length) {
     return {
-      plan: { modelVersion: typeof plan?.modelVersion === "string" ? plan.modelVersion : "", actionIds: Array.isArray(plan?.actionIds) ? [...plan.actionIds] : [] },
+      plan: { modelVersion: typeof plan?.modelVersion === "string" ? plan.modelVersion : "", selections: Array.isArray(plan?.selections) ? plan.selections.map((selection) => ({ ...selection })) : [] },
       totalCost,
-      remainingBudget: catalog?.config && isFiniteNumber(catalog.config.budgetLimit) ? catalog.config.budgetLimit - totalCost : 0,
+      remainingBudget: finite(catalog?.config?.budgetLimit) ? catalog.config.budgetLimit - totalCost : 0,
       warnings: [], valid: false, officialScore: null, errors, metrics: null, trace: [],
     };
   }
   return calculateValid(plan, catalog);
 }
 
-function requireEvent(eventId: string, catalog: Catalog) {
-  const event = catalog.events.find((candidate) => candidate.id === eventId);
-  if (!event) throw new DomainError("UNKNOWN_EVENT", `Неизвестное событие ${eventId}.`, [issue("UNKNOWN_EVENT", `Неизвестное событие ${eventId}.`)]);
-  return event;
+// The supplied organizer dataset lists no events. Preserve explicit failures for stale clients.
+export function previewEvent(_input: EventPreviewInput, _catalog: Catalog): EventPreviewResult {
+  const errors = [makeIssue("EVENTS_NOT_CONFIGURED", "В предоставленном наборе данных события не заданы.")];
+  throw new DomainError("EVENTS_NOT_CONFIGURED", errors[0].message, errors);
 }
-
-function requireValidBase(basePlan: PlanInput, catalog: Catalog): ValidSimulation {
-  const base = simulatePlan(basePlan, catalog);
-  if (!base.valid) throw new DomainError("INVALID_BASE_PLAN", "Исходный план события недопустим.", base.errors);
-  return base;
-}
-
-function requireValidBranch(plan: PlanInput, catalog: Catalog, eventId: string): ValidSimulation {
-  const branch = simulatePlan(plan, catalog, eventId);
-  if (!branch.valid) throw new DomainError("INVALID_EVENT_SWAP", "Замена не образует допустимый план.", branch.errors);
-  return branch;
-}
-
-function comparison(base: ValidSimulation, branch: ValidSimulation, catalog: Catalog): Comparison {
-  const dimensionsDelta = blankMetrics();
-  for (const direction of DIRECTIONS) dimensionsDelta[direction] = branch.metrics.dimensions[direction] - base.metrics.dimensions[direction];
-  const districts = catalog.districts.map((district) => {
-    const before = base.metrics.districts.find((item) => item.districtId === district.id)!;
-    const after = branch.metrics.districts.find((item) => item.districtId === district.id)!;
-    const districtDimensionsDelta = blankMetrics();
-    for (const direction of DIRECTIONS) districtDimensionsDelta[direction] = after.after[direction] - before.after[direction];
-    return { districtId: district.id, scoreDelta: after.scoreAfter - before.scoreAfter, dimensionsDelta: districtDimensionsDelta };
-  });
-  return { scoreDelta: branch.officialScore - base.officialScore, dimensionsDelta, districts };
-}
-
-function sortAndLimit(options: ReplacementOption[]): ReplacementOption[] {
-  return options.sort((left, right) => {
-    const scoreDifference = Math.round(right.result.officialScore * 1e9) - Math.round(left.result.officialScore * 1e9);
-    return scoreDifference || left.result.totalCost - right.result.totalCost || lexical(left.addedActionId, right.addedActionId) || lexical(left.removedActionId, right.removedActionId);
-  }).slice(0, 3);
-}
-
-function planForSwap(base: ValidSimulation, removedActionId: string, addedActionId: string): PlanInput {
-  return {
-    modelVersion: base.plan.modelVersion,
-    actionIds: base.plan.actionIds.filter((id) => id !== removedActionId).concat(addedActionId),
-  };
-}
-
-function recommendations(base: ValidSimulation, event: Catalog["events"][number], catalog: Catalog): ReplacementOption[] {
-  const removedIds = event.kind === "cancellation" ? [event.blockedActionId] : base.plan.actionIds;
-  const fixedAddedId = event.kind === "opportunity" ? event.unlockedActionId : undefined;
-  const candidates = fixedAddedId
-    ? catalog.actions.filter((action) => action.id === fixedAddedId)
-    : catalog.actions.filter((action) => action.availability.kind === "always");
-  const options: ReplacementOption[] = [];
-  for (const removedActionId of removedIds) {
-    for (const action of candidates) {
-      if (base.plan.actionIds.includes(action.id)) continue;
-      const nextPlan = planForSwap(base, removedActionId, action.id);
-      const result = simulatePlan(nextPlan, catalog, event.id);
-      if (!result.valid) continue;
-      options.push({
-        removedActionId,
-        addedActionId: action.id,
-        plan: result.plan,
-        result,
-        comparison: comparison(base, result, catalog),
-      });
-    }
-  }
-  return sortAndLimit(options);
-}
-
-/** Creates a separate, deterministic preview branch for a catalog event. */
-export function previewEvent(input: EventPreviewInput, catalog: Catalog): EventPreviewResult {
-  if (!input || typeof input.eventId !== "string") throw new DomainError("UNKNOWN_EVENT", "Не указано корректное событие.");
-  const event = requireEvent(input.eventId, catalog);
-  const base = requireValidBase(input.basePlan, catalog);
-  if (event.kind === "cancellation" && !base.plan.actionIds.includes(event.blockedActionId)) {
-    throw new DomainError("EVENT_NOT_APPLICABLE", "Отменяемое мероприятие отсутствует в исходном плане.", [issue("EVENT_NOT_APPLICABLE", "Событие отмены неприменимо к исходному плану.", [event.blockedActionId])]);
-  }
-  const draft: PlanInput = event.kind === "cancellation"
-    ? { modelVersion: base.plan.modelVersion, actionIds: base.plan.actionIds.filter((id) => id !== event.blockedActionId) }
-    : { modelVersion: base.plan.modelVersion, actionIds: [...base.plan.actionIds] };
-  const draftResult = simulatePlan(draft, catalog);
-  return { base, event, draft, draftResult, requiresReplacement: true, replacementOptions: recommendations(base, event, catalog) };
-}
-
-/** Revalidates an event swap from catalog data and returns a fresh comparison. */
-export function confirmEvent(input: EventConfirmInput, catalog: Catalog): EventConfirmResult {
-  if (!input || typeof input.eventId !== "string") throw new DomainError("UNKNOWN_EVENT", "Не указано корректное событие.");
-  const event = requireEvent(input.eventId, catalog);
-  const base = requireValidBase(input.basePlan, catalog);
-  const { removedActionId, addedActionId } = input;
-  const baseIds = base.plan.actionIds;
-  if (typeof removedActionId !== "string" || typeof addedActionId !== "string" || !baseIds.includes(removedActionId) || baseIds.includes(addedActionId)) {
-    throw new DomainError("INVALID_EVENT_SWAP", "Укажите одно выбранное мероприятие для удаления и одно новое для добавления.", [issue("INVALID_EVENT_SWAP", "Пара замены не соответствует исходной пятерке.", [removedActionId, addedActionId].filter((id): id is string => typeof id === "string"))]);
-  }
-  if (event.kind === "cancellation" && removedActionId !== event.blockedActionId) {
-    throw new DomainError("INVALID_EVENT_SWAP", "Событие разрешает заменить только отмененное мероприятие.", [issue("INVALID_EVENT_SWAP", "Удаляемое мероприятие не совпадает с отмененным.", [removedActionId, event.blockedActionId])]);
-  }
-  if (event.kind === "opportunity" && addedActionId !== event.unlockedActionId) {
-    throw new DomainError("INVALID_EVENT_SWAP", "Событие разрешает добавить только открывшееся мероприятие.", [issue("INVALID_EVENT_SWAP", "Добавляемое мероприятие не совпадает с открывшимся.", [addedActionId, event.unlockedActionId])]);
-  }
-  const candidatePlan = planForSwap(base, removedActionId, addedActionId);
-  const branch = requireValidBranch(candidatePlan, catalog, event.id);
-  return { base, event, branch, comparison: comparison(base, branch, catalog) };
+export function confirmEvent(_input: EventConfirmInput, _catalog: Catalog): EventConfirmResult {
+  const errors = [makeIssue("EVENTS_NOT_CONFIGURED", "В предоставленном наборе данных события не заданы.")];
+  throw new DomainError("EVENTS_NOT_CONFIGURED", errors[0].message, errors);
 }

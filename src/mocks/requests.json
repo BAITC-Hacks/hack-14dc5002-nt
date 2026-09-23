@@ -1,119 +1,45 @@
 {
   "simulateValid": {
-    "modelVersion": "demo-v1",
-    "actionIds": [
-      "bus_lanes",
-      "school_new",
-      "park_local",
-      "lighting_smart",
-      "services_online"
+    "modelVersion": "organizer-v1",
+    "selections": [
+      { "actionId": "M7", "districtId": "nura" },
+      { "actionId": "M8", "districtId": "nura" },
+      { "actionId": "M10", "districtId": "nura" },
+      { "actionId": "M12" },
+      { "actionId": "M5", "districtId": "saryarka" }
     ]
   },
   "simulateInvalidFour": {
-    "modelVersion": "demo-v1",
-    "actionIds": [
-      "bus_lanes",
-      "lighting_smart",
-      "park_local",
-      "services_online"
+    "modelVersion": "organizer-v1",
+    "selections": [
+      { "actionId": "M7", "districtId": "nura" },
+      { "actionId": "M8", "districtId": "nura" },
+      { "actionId": "M10", "districtId": "nura" },
+      { "actionId": "M12" }
     ]
   },
   "simulateInvalidSix": {
-    "modelVersion": "demo-v1",
-    "actionIds": [
-      "bus_lanes",
-      "lighting_smart",
-      "park_local",
-      "safe_crossings",
-      "school_new",
-      "services_online"
+    "modelVersion": "organizer-v1",
+    "selections": [
+      { "actionId": "M7", "districtId": "nura" },
+      { "actionId": "M8", "districtId": "nura" },
+      { "actionId": "M10", "districtId": "nura" },
+      { "actionId": "M12" },
+      { "actionId": "M5", "districtId": "saryarka" },
+      { "actionId": "M1", "districtId": "esil" }
     ]
-  },
-  "eventPreview": {
-    "basePlan": {
-      "modelVersion": "demo-v1",
-      "actionIds": [
-        "bus_lanes",
-        "school_new",
-        "park_local",
-        "lighting_smart",
-        "services_online"
-      ]
-    },
-    "eventId": "school_site_unavailable"
-  },
-  "eventConfirm": {
-    "basePlan": {
-      "modelVersion": "demo-v1",
-      "actionIds": [
-        "bus_lanes",
-        "school_new",
-        "park_local",
-        "lighting_smart",
-        "services_online"
-      ]
-    },
-    "eventId": "school_site_unavailable",
-    "removedActionId": "school_new",
-    "addedActionId": "school_modular"
-  },
-  "opportunityPreview": {
-    "basePlan": {
-      "modelVersion": "demo-v1",
-      "actionIds": [
-        "bus_lanes",
-        "school_new",
-        "park_local",
-        "lighting_smart",
-        "services_online"
-      ]
-    },
-    "eventId": "digital_grant_available"
-  },
-  "opportunityConfirm": {
-    "basePlan": {
-      "modelVersion": "demo-v1",
-      "actionIds": [
-        "bus_lanes",
-        "school_new",
-        "park_local",
-        "lighting_smart",
-        "services_online"
-      ]
-    },
-    "eventId": "digital_grant_available",
-    "removedActionId": "bus_lanes",
-    "addedActionId": "digital_grant"
   },
   "explainBase": {
     "kind": "base",
     "plan": {
-      "modelVersion": "demo-v1",
-      "actionIds": [
-        "bus_lanes",
-        "school_new",
-        "park_local",
-        "lighting_smart",
-        "services_online"
+      "modelVersion": "organizer-v1",
+      "selections": [
+        { "actionId": "M7", "districtId": "nura" },
+        { "actionId": "M8", "districtId": "nura" },
+        { "actionId": "M10", "districtId": "nura" },
+        { "actionId": "M12" },
+        { "actionId": "M5", "districtId": "saryarka" }
       ]
-    }
-  },
-  "explainEvent": {
-    "kind": "event",
-    "change": {
-      "basePlan": {
-        "modelVersion": "demo-v1",
-        "actionIds": [
-          "bus_lanes",
-          "school_new",
-          "park_local",
-          "lighting_smart",
-          "services_online"
-        ]
-      },
-      "eventId": "school_site_unavailable",
-      "removedActionId": "school_new",
-      "addedActionId": "school_modular"
     }
   }
 }
