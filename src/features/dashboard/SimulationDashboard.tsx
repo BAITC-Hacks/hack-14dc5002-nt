@@ -105,7 +105,7 @@ function ScoreResult({
         <p><strong>Компромисс:</strong> {explanation.tradeoff}</p>
         <p><strong>Ограничение:</strong> {explanation.limitation}</p>
       </> : null}
-      {!explaining && !explanation && !explanationError ? <button className="button button-secondary button-small" onClick={onExplain}>Получить объяснение</button> : null}
+      {!explaining && !explanation ? <button className="button button-secondary button-small" type="button" onClick={onExplain}>{explanationError ? "Повторить объяснение" : "Получить объяснение"}</button> : null}
     </div>
     <p className="disclaimer">{catalog.config.disclaimer}</p>
   </>;
@@ -207,7 +207,7 @@ export function SimulationDashboard() {
     };
   }, []);
 
-  const actions = catalog?.actions ?? [];
+  const actions = useMemo(() => catalog?.actions ?? [], [catalog]);
   const actionMap = useMemo(
     () => new Map(actions.map((action): [string, Action] => [action.id, action])),
     [actions],
@@ -420,8 +420,14 @@ export function SimulationDashboard() {
       </aside>
     </section>
 
+    <nav className="workflow-nav" aria-label="Этапы работы">
+      <a href="#plan-heading"><span className="workflow-number">01</span><span>Соберите план<small>{required} мероприятий · до {budgetLimit} единиц</small></span></a>
+      <a href="#result-heading"><span className="workflow-number">02</span><span>Оцените результат<small>Показатели и районы</small></span></a>
+      <a href="#event-heading"><span className="workflow-number">03</span><span>Сравните сценарии<small>Событие и одна замена</small></span></a>
+    </nav>
+
     <div className="section-heading">
-      <div><h2>Соберите городской план</h2><p>Можно выбирать меры разных или одинаковых направлений.</p></div>
+      <div><h2 id="plan-heading">Соберите городской план</h2><p>Можно выбирать меры разных или одинаковых направлений.</p></div>
       <div className="heading-actions">
         <button className="button button-secondary" type="button" onClick={loadDemo}>Загрузить демо-план</button>
         <button className="button button-primary" type="button" onClick={runSimulation} disabled={simulating || selectedIds.length === 0}>{simulating ? <><span className="spinner" />Считаем…</> : "Рассчитать результат"}</button>
@@ -445,18 +451,38 @@ export function SimulationDashboard() {
             const eventOnly = action.availability.kind === "event";
             const disableCard = eventOnly || (!isSelected && selectedIds.length >= required);
             const effects = Object.entries(action.effects).flatMap(([districtId, metrics]) => Object.entries(metrics).map(([name, value]) => ({ districtId, name: name as Direction, value })));
+            const missingRequirements = action.constraints.requires.filter((id) => !selectedIds.includes(id));
+            const incompatibleIds = [...new Set([
+              ...action.constraints.excludes,
+              ...actions.filter((item) => item.constraints.excludes.includes(action.id)).map((item) => item.id),
+            ])];
+            const selectedConflicts = incompatibleIds.filter((id) => selectedIds.includes(id));
+            const needsRequirement = isSelected && missingRequirements.length > 0;
+            const hasConflict = isSelected && selectedConflicts.length > 0;
+            const names = (ids: string[]) => ids.map((id) => actionMap.get(id)?.title ?? id).join(", ");
+            const repeatedDisclaimer = catalog.config.dataMode === "synthetic"
+              && action.description === "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.";
             return <button className={"action-card " + (isSelected ? "selected" : "")} type="button" key={action.id} aria-pressed={isSelected} disabled={disableCard} onClick={() => toggle(action)}>
               <span className="action-check" aria-hidden="true">{isSelected ? "✓" : ""}</span>
               <div className="action-card-top"><h4>{action.title}</h4><span className="action-cost">{action.cost} ед.</span></div>
-              <p className="action-desc">{action.description}</p>
+              {!repeatedDisclaimer ? <p className="action-desc">{action.description}</p> : null}
               <div className="action-meta">
                 <span className="mini-tag">{LABELS[action.direction]}</span>
                 <span className="mini-tag">{action.lagMonths === 0 ? "Без задержки" : "Эффект через " + action.lagMonths + " мес."}</span>
-                {effects.slice(0, 3).map((effect) => <span className="mini-tag" key={action.id + effect.districtId + effect.name}>{effect.districtId} · {LABELS[effect.name]} {delta(effect.value)}</span>)}
-                {action.constraints.requires.length ? <span className="mini-tag alert">Требует: {action.constraints.requires.map((id) => actionMap.get(id)?.title ?? id).join(", ")}</span> : null}
-                {action.constraints.excludes.length ? <span className="mini-tag alert">Несовместимо: {action.constraints.excludes.map((id) => actionMap.get(id)?.title ?? id).join(", ")}</span> : null}
-                {eventOnly ? <span className="mini-tag alert">Откроется после события</span> : null}
               </div>
+              <div className="action-effects">
+                <span className="effects-label">Эффекты по районам</span>
+                <div className="action-meta">{effects.map((effect) => <span className="mini-tag" key={action.id + effect.districtId + effect.name}>{effect.districtId} · {LABELS[effect.name]} {delta(effect.value)}</span>)}</div>
+              </div>
+              {action.constraints.requires.length || incompatibleIds.length || eventOnly ? <div className="action-rules">
+                {action.constraints.requires.length ? <span className={"rule-note" + (needsRequirement ? " rule-note-warning" : "")}>
+                  {needsRequirement ? "Добавьте в план: " + names(missingRequirements) : "Требуется вместе с: " + names(action.constraints.requires)}
+                </span> : null}
+                {incompatibleIds.length ? <span className={"rule-note" + (hasConflict ? " rule-note-warning" : "")}>
+                  {hasConflict ? "Конфликт в плане. Уберите это мероприятие или: " + names(selectedConflicts) : "Нельзя выбрать вместе с: " + names(incompatibleIds)}
+                </span> : null}
+                {eventOnly ? <span className="rule-note">Доступно только после события</span> : null}
+              </div> : null}
             </button>;
           })}
         </div>
@@ -526,7 +552,7 @@ export function SimulationDashboard() {
             {eventPreviewResult.replacementOptions.map((option) => {
               const optionKey = option.removedActionId + "|" + option.addedActionId;
               const selected = replacementKey === optionKey;
-              return <button type="button" className={"replacement-card " + (selected ? "selected" : "")} key={optionKey} aria-pressed={selected} onClick={() => setReplacementKey(optionKey)}>
+              return <button type="button" className={"replacement-card " + (selected ? "selected" : "")} key={optionKey} aria-pressed={selected} disabled={confirmingEvent} onClick={() => setReplacementKey(optionKey)}>
                 <span className="replacement-radio" aria-hidden="true">{selected ? "●" : "○"}</span>
                 <span className="replacement-copy">
                   <strong>{actionMap.get(option.addedActionId)?.title ?? option.addedActionId}</strong>
@@ -536,7 +562,6 @@ export function SimulationDashboard() {
               </button>;
             })}
           </div>
-          {eventError ? <ErrorBox>{eventError}</ErrorBox> : null}
           <div className="event-actions">
             <span className="district-sub">Предварительный балл относится к полному валидному плану из пяти мер.</span>
             <button className="button button-primary" type="button" disabled={!replacementKey || confirmingEvent} onClick={() => {
@@ -565,8 +590,8 @@ export function SimulationDashboard() {
             <div className="explanation-head"><strong>Объяснение последствий</strong>{eventExplanation?.source === "template" ? <span className="template-label">Шаблонное объяснение</span> : null}{eventExplanation?.source === "ai" ? <span className="template-label">Объяснение ИИ</span> : null}</div>
             {explainingEvent ? <div className="loading-row"><span className="spinner" />Готовим пояснение…</div> : null}
             {eventExplanationError ? <ErrorBox>{eventExplanationError}</ErrorBox> : null}
-            {eventExplanation ? <><p>{eventExplanation.summary}</p><p><strong>Компромисс:</strong> {eventExplanation.tradeoff}</p><p><strong>Ограничение:</strong> {eventExplanation.limitation}</p></> : null}
-            {!explainingEvent && !eventExplanation && !eventExplanationError ? <button className="button button-secondary button-small" type="button" onClick={() => void explainConfirmedEvent()}>Получить объяснение</button> : null}
+            {eventExplanation ? <><p>{eventExplanation.summary}</p>{eventExplanation.observations.map((item, index) => <p key={item.actionIds.join("-") + "-" + index}>{item.text}</p>)}<p><strong>Компромисс:</strong> {eventExplanation.tradeoff}</p><p><strong>Ограничение:</strong> {eventExplanation.limitation}</p></> : null}
+            {!explainingEvent && !eventExplanation ? <button className="button button-secondary button-small" type="button" onClick={() => void explainConfirmedEvent()}>{eventExplanationError ? "Повторить объяснение" : "Получить объяснение"}</button> : null}
           </div>
         </div> : null}
       </> : null}
