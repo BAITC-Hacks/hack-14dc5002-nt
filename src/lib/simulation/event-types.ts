@@ -61,3 +61,51 @@ export interface TeamEventConfirmResult {
   branch: ValidSimulation;
   comparison: Comparison;
 }
+
+/** A catalog action is mandatory; its parameters are never supplied by the request. */
+export interface TeamOpportunityEvent {
+  readonly id: "require-action";
+  readonly version: string;
+  readonly modelVersion: string;
+  readonly kind: "opportunity";
+  readonly source: "team-scenario";
+  readonly title: string;
+  readonly requiredActionId: string;
+  readonly refundPolicy: "full-before-start";
+  readonly maxRecommendations: number;
+  readonly disclaimer: string;
+}
+
+export interface OpportunityPreviewInput extends EventPreviewInput {
+  eventId: "require-action";
+  eventVersion: string;
+  requiredActionId: string;
+}
+
+export interface OpportunityConfirmInput extends OpportunityPreviewInput, Pick<EventConfirmInput, "removedActionId" | "addedActionId"> {
+  addedDistrictId?: string;
+}
+
+export interface OpportunityReplacementOption extends TeamReplacementOption {
+  refundAmount: number;
+  /** Budget available after removing this option's old action, before adding the required one. */
+  availableBudget: number;
+}
+
+interface OpportunityPreviewCommon {
+  base: ValidSimulation;
+  event: TeamOpportunityEvent;
+}
+
+export type OpportunityPreviewResult = OpportunityPreviewCommon & (
+  | { status: "already-satisfied"; requiresReplacement: false; replacementOptions: [] }
+  | { status: "replacement-required"; requiresReplacement: true; replacementOptions: OpportunityReplacementOption[] }
+  | { status: "no-valid-replacement"; requiresReplacement: true; replacementOptions: [] }
+);
+
+export interface OpportunityConfirmResult {
+  base: ValidSimulation;
+  event: TeamOpportunityEvent;
+  branch: ValidSimulation;
+  comparison: Comparison;
+}

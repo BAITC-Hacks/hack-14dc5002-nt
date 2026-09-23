@@ -1,4 +1,16 @@
-import type { TeamCancellationEvent } from "../lib/simulation/event-types.ts";
+import type { TeamCancellationEvent, TeamOpportunityEvent } from "../lib/simulation/event-types.ts";
+
+/** Mandatory catalog action; no new costs/effects and no change to the organizer dataset. */
+export const REQUIRED_ACTION_EVENT: Readonly<Omit<TeamOpportunityEvent, "requiredActionId" | "modelVersion">> = Object.freeze({
+  id: "require-action",
+  version: "team-events-v3",
+  kind: "opportunity",
+  source: "team-scenario",
+  title: "Обязательное мероприятие из каталога",
+  refundPolicy: "full-before-start",
+  maxRecommendations: 3,
+  disclaimer: "Сценарий команды: выбранная мера каталога должна войти в пятёрку вместо одной прежней. Замена до начала исполнения, бюджет и ограничения сохраняются.",
+});
 
 /** General cancellation rule; target and replacement IDs are resolved from the current catalog. */
 export const ACTION_CANCELLATION_EVENT: Readonly<Omit<TeamCancellationEvent, "cancelledActionId" | "replacementActionIds">> = Object.freeze({

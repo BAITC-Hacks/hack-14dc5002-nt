@@ -1,18 +1,15 @@
-import { INDICATORS } from "../../contracts/index.ts";
-import type { Catalog, Comparison, Metrics, PlanInput, PlanSelection, ValidSimulation } from "../../contracts/index.ts";
-import { ACTION_CANCELLATION_EVENT, SCHOOL_CANCELLATION_EVENT } from "../../data/team-events.ts";
+import type { Catalog, PlanSelection } from "../../contracts/index.ts";
+import { ACTION_CANCELLATION_EVENT, REQUIRED_ACTION_EVENT, SCHOOL_CANCELLATION_EVENT } from "../../data/team-events.ts";
 import { DomainError, simulatePlan } from "./index.ts";
+import { comparison, copyPlan, lexical, nonemptyString, rank, record, replacementPlan } from "./event-utils.ts";
+import { confirmOpportunity, previewOpportunity } from "./opportunity.ts";
 import type {
+  OpportunityConfirmInput, OpportunityConfirmResult, OpportunityPreviewInput, OpportunityPreviewResult,
   TeamCancellationEvent, TeamEventConfirmInput, TeamEventConfirmResult, TeamEventPreviewInput,
   TeamEventPreviewResult, TeamReplacementOption,
 } from "./event-types.ts";
 
 export type * from "./event-types.ts";
-
-const lexical = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
-const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
-const nonemptyString = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
-const copyPlan = (plan: PlanInput): PlanInput => ({ modelVersion: plan.modelVersion, selections: plan.selections.map((selection) => ({ ...selection })) });
 
 function prepareEvent(input: TeamEventPreviewInput, catalog: Catalog) {
   if (!record(input) || !nonemptyString(input.eventId) || !nonemptyString(input.eventVersion)) {
@@ -23,6 +20,9 @@ function prepareEvent(input: TeamEventPreviewInput, catalog: Catalog) {
     : input.eventId === ACTION_CANCELLATION_EVENT.id ? ACTION_CANCELLATION_EVENT : undefined;
   if (!rule) throw new DomainError("UNKNOWN_EVENT", "Неизвестное событие команды.");
   if (input.eventVersion !== rule.version) throw new DomainError("EVENT_VERSION_MISMATCH", "Версия сценария события не совпадает.");
+  if ("requiredActionId" in input && input.requiredActionId !== undefined) {
+    throw new DomainError("INVALID_EVENT_INPUT", "Отмена и обязательное мероприятие — разные сценарии.");
+  }
   if (input.cancelledActionId !== undefined && !nonemptyString(input.cancelledActionId)) {
     throw new DomainError("INVALID_EVENT_INPUT", "ID отменяемой меры должен быть непустой строкой.");
   }
@@ -55,38 +55,8 @@ function prepareEvent(input: TeamEventPreviewInput, catalog: Catalog) {
   return { base, event, draft, draftResult, refundAmount, availableBudget: draftResult.remainingBudget };
 }
 
-function comparison(base: ValidSimulation, branch: ValidSimulation): Comparison {
-  const delta = (before: Metrics, after: Metrics): Metrics => Object.fromEntries(
-    INDICATORS.map((indicator) => [indicator, after[indicator] - before[indicator]]),
-  ) as Metrics;
-  const beforeById = new Map(base.metrics.districts.map((district) => [district.districtId, district]));
-  return {
-    scoreDelta: branch.officialScore - base.officialScore,
-    indicatorsDelta: delta(base.metrics.indicators, branch.metrics.indicators),
-    districts: branch.metrics.districts.map((district) => ({
-      districtId: district.districtId,
-      scoreDelta: district.scoreAfter - beforeById.get(district.districtId)!.scoreAfter,
-      indicatorsDelta: delta(beforeById.get(district.districtId)!.after, district.after),
-    })),
-  };
-}
-
-function replacementPlan(draft: PlanInput, addedSelection: PlanSelection): PlanInput {
-  const plan = copyPlan(draft);
-  plan.selections.push({ ...addedSelection });
-  return plan;
-}
-
-/** Prefer higher Score, then lower cost, then stable action/district ID ordering. */
-function rank(a: TeamReplacementOption, b: TeamReplacementOption): number {
-  return b.result.officialScore - a.result.officialScore
-    || a.result.totalCost - b.result.totalCost
-    || lexical(a.addedActionId, b.addedActionId)
-    || lexical(a.addedSelection.districtId ?? "", b.addedSelection.districtId ?? "");
-}
-
 /** Enumerate every allowed action/target, scoring only complete five-action plans. */
-export function previewEvent(input: TeamEventPreviewInput, catalog: Catalog): TeamEventPreviewResult {
+function previewCancellation(input: TeamEventPreviewInput, catalog: Catalog): TeamEventPreviewResult {
   const state = prepareEvent(input, catalog);
   const retainedIds = new Set(state.draft.selections.map((selection) => selection.actionId));
   const bestByAction = new Map<string, TeamReplacementOption>();
@@ -118,7 +88,7 @@ export function previewEvent(input: TeamEventPreviewInput, catalog: Catalog): Te
 }
 
 /** Rebuild from the authoritative base plan and current catalog; never trust a preview. */
-export function confirmEvent(input: TeamEventConfirmInput, catalog: Catalog): TeamEventConfirmResult {
+function confirmCancellation(input: TeamEventConfirmInput, catalog: Catalog): TeamEventConfirmResult {
   if (!record(input) || !nonemptyString(input.removedActionId) || !nonemptyString(input.addedActionId)
     || (input.addedDistrictId !== undefined && typeof input.addedDistrictId !== "string")) {
     throw new DomainError("INVALID_REPLACEMENT_INPUT", "Необходимы ID удаляемой меры, ID замены и корректный район.");
@@ -139,4 +109,18 @@ export function confirmEvent(input: TeamEventConfirmInput, catalog: Catalog): Te
   const branch = simulatePlan(replacementPlan(state.draft, addedSelection), catalog);
   if (!branch.valid) throw new DomainError("INVALID_REPLACEMENT", "Замена не образует допустимую пятёрку.", branch.errors);
   return { base: state.base, event: state.event, branch, comparison: comparison(state.base, branch) };
+}
+
+export function previewEvent(input: OpportunityPreviewInput, catalog: Catalog): OpportunityPreviewResult;
+export function previewEvent(input: TeamEventPreviewInput, catalog: Catalog): TeamEventPreviewResult;
+export function previewEvent(input: TeamEventPreviewInput | OpportunityPreviewInput, catalog: Catalog): TeamEventPreviewResult | OpportunityPreviewResult {
+  if (input?.eventId === REQUIRED_ACTION_EVENT.id) return previewOpportunity(input as OpportunityPreviewInput, catalog);
+  return previewCancellation(input, catalog);
+}
+
+export function confirmEvent(input: OpportunityConfirmInput, catalog: Catalog): OpportunityConfirmResult;
+export function confirmEvent(input: TeamEventConfirmInput, catalog: Catalog): TeamEventConfirmResult;
+export function confirmEvent(input: TeamEventConfirmInput | OpportunityConfirmInput, catalog: Catalog): TeamEventConfirmResult | OpportunityConfirmResult {
+  if (input?.eventId === REQUIRED_ACTION_EVENT.id) return confirmOpportunity(input as OpportunityConfirmInput, catalog);
+  return confirmCancellation(input, catalog);
 }
