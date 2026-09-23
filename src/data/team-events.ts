@@ -1,5 +1,18 @@
 import type { TeamCancellationEvent } from "../lib/simulation/event-types.ts";
 
+/** General cancellation rule; target and replacement IDs are resolved from the current catalog. */
+export const ACTION_CANCELLATION_EVENT: Readonly<Omit<TeamCancellationEvent, "cancelledActionId" | "replacementActionIds">> = Object.freeze({
+  id: "cancel-action",
+  version: "team-events-v2",
+  modelVersion: "organizer-v1",
+  kind: "cancellation",
+  source: "team-scenario",
+  title: "Отмена выбранного мероприятия",
+  refundPolicy: "full-before-start",
+  maxRecommendations: 3,
+  disclaimer: "Сценарий команды: отмена выбранной меры до начала исполнения, полный возврат стоимости, отменённая мера недоступна в новой ветви. Это не событие из исходного датасета организатора.",
+});
+
 /** Approved team scenario, NOT part of the organizer's original dataset. */
 export const SCHOOL_CANCELLATION_EVENT: TeamCancellationEvent = Object.freeze({
   id: "cancel-m7",

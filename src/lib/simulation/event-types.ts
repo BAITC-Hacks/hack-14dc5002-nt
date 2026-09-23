@@ -20,12 +20,24 @@ export interface TeamCancellationEvent {
 
 export interface TeamEventPreviewInput extends EventPreviewInput {
   eventVersion: string;
+  /** Required for cancel-action; cancel-m7 defaults to M7 for compatibility. */
+  cancelledActionId?: string;
 }
 
 export interface TeamEventConfirmInput extends EventConfirmInput {
   eventVersion: string;
+  /** The same cancellation target as in the preview, not a different removed action. */
+  cancelledActionId?: string;
   /** Required for district replacements; forbidden for city replacements. */
   addedDistrictId?: string;
+}
+
+/** Prefer these stricter inputs when calling the general cancellation scenario. */
+export interface ActionCancellationPreviewInput extends TeamEventPreviewInput {
+  cancelledActionId: string;
+}
+export interface ActionCancellationConfirmInput extends TeamEventConfirmInput {
+  cancelledActionId: string;
 }
 
 export interface TeamReplacementOption extends ReplacementOption {
