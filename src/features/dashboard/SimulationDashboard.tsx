@@ -7,6 +7,7 @@ import type {
 } from "@/contracts";
 import { DIRECTIONS } from "@/contracts";
 import { confirmEvent, explain, getCatalog, previewEvent, simulate } from "@/lib/client-api";
+import { readStoredPlan } from "./stored-plan";
 
 const STORAGE_KEY = "akim-five-hours:base-snapshot:v1";
 const LABELS: Record<Direction, string> = {
@@ -17,7 +18,7 @@ const numberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }
 const fmt = (value: number) => numberFormat.format(value);
 const delta = (value: number) => (value > 0 ? "+" : "") + fmt(value);
 type Snapshot = { plan: PlanInput; result: ValidSimulation; savedAt: string };
-type StoredSnapshot = Snapshot & { modelVersion: string };
+type StoredSnapshot = Pick<Snapshot, "plan" | "savedAt"> & { modelVersion: string };
 
 function key(plan: PlanInput) {
   return plan.modelVersion + ":" + [...plan.actionIds].sort().join(",");
@@ -118,6 +119,7 @@ export function SimulationDashboard() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [baseSnapshot, setBaseSnapshot] = useState<Snapshot | null>(null);
   const [versionMismatch, setVersionMismatch] = useState<string | null>(null);
+  const [storageNotice, setStorageNotice] = useState<string | null>(null);
   const [simulation, setSimulation] = useState<SimulationResult | null>(null);
   const [simulationError, setSimulationError] = useState<string | null>(null);
   const [simulating, setSimulating] = useState(false);
@@ -139,7 +141,7 @@ export function SimulationDashboard() {
 
   useEffect(() => {
     let active = true;
-    void getCatalog().then((response) => {
+    void getCatalog().then(async (response) => {
       if (!active) return;
       if (!response.ok) {
         setCatalogError(response.error.message);
@@ -147,27 +149,62 @@ export function SimulationDashboard() {
         return;
       }
       setCatalog(response.data);
+      setCatalogLoading(false);
+      let plan: PlanInput | null = null;
       try {
         const raw = window.localStorage.getItem(STORAGE_KEY);
         if (raw) {
-          const saved = JSON.parse(raw) as StoredSnapshot;
-          if (saved.modelVersion !== response.data.config.modelVersion) setVersionMismatch(saved.modelVersion);
-          else {
-            setBaseSnapshot({ plan: saved.plan, result: saved.result, savedAt: saved.savedAt });
-            setSelectedIds(saved.plan.actionIds);
+          const saved: unknown = JSON.parse(raw);
+          plan = readStoredPlan(saved);
+          if (!plan) {
+            setStorageNotice("Сохранённый план повреждён. Выберите мероприятия заново; сохранённые баллы не использованы.");
+            return;
+          }
+          if (plan.modelVersion !== response.data.config.modelVersion) {
+            setVersionMismatch(plan.modelVersion);
+            return;
+          }
+          const knownIds = new Set(response.data.actions.map((action) => action.id));
+          if (plan.actionIds.some((id) => !knownIds.has(id))) {
+            setStorageNotice("В сохранённом плане есть неизвестные мероприятия. Соберите план заново.");
+            return;
           }
         }
       } catch {
-        setVersionMismatch("неизвестной версии");
+        setStorageNotice("Не удалось прочитать сохранённый план. Можно собрать новый план или загрузить демо.");
+        return;
       }
-      setCatalogLoading(false);
+      if (!plan) return;
+      // Recalculate through the adapter before trusting any persisted snapshot.
+      const requestId = ++simulationRequest.current;
+      setSelectedIds(plan.actionIds);
+      setSimulating(true);
+      const restored = await simulate(plan).catch((): ApiResponse<SimulationResult> => ({
+        ok: false,
+        error: { code: "NETWORK_ERROR", message: "Не удалось проверить сохранённый план. Попробуйте рассчитать его снова." },
+      }));
+      if (!active || requestId !== simulationRequest.current) return;
+      setSimulating(false);
+      if (!restored.ok) {
+        setSimulationError(restored.error.message);
+        return;
+      }
+      setSimulation(restored.data);
+      if (valid(restored.data)) {
+        setBaseSnapshot({ plan, result: restored.data, savedAt: new Date().toISOString() });
+      }
     }).catch((error: unknown) => {
       if (active) {
         setCatalogError(error instanceof Error ? error.message : "Не удалось загрузить каталог.");
         setCatalogLoading(false);
       }
     });
-    return () => { active = false; };
+    return () => {
+      active = false;
+      simulationRequest.current += 1;
+      explanationRequest.current += 1;
+      eventRequest.current += 1;
+    };
   }, []);
 
   const actions = catalog?.actions ?? [];
@@ -192,6 +229,7 @@ export function SimulationDashboard() {
     setExplanation(null);
     setExplanationError(null);
     setExplaining(false);
+    setStorageNotice(null);
   }, []);
 
   const toggle = (action: Action) => {
@@ -238,8 +276,9 @@ export function SimulationDashboard() {
     setReplacementKey(null);
     setEventExplanation(null);
     setEventExplanationError(null);
+    setExplainingEvent(false);
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...snapshot, modelVersion: plan.modelVersion } satisfies StoredSnapshot));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ plan, savedAt: snapshot.savedAt, modelVersion: plan.modelVersion } satisfies StoredSnapshot));
     } catch {
       setSimulationError("Результат рассчитан, но не удалось сохранить снимок в этом браузере.");
     }
@@ -275,6 +314,7 @@ export function SimulationDashboard() {
     setReplacementKey(null);
     setEventExplanation(null);
     setEventExplanationError(null);
+    setExplainingEvent(false);
     const input = { basePlan: baseSnapshot.plan, eventId };
     const response = await previewEvent(input).catch((error: unknown): ApiResponse<EventPreviewResult> => ({
       ok: false,
@@ -298,6 +338,7 @@ export function SimulationDashboard() {
     };
     setConfirmingEvent(true);
     setEventError(null);
+    setExplainingEvent(false);
     const response = await confirmEvent(input).catch((error: unknown): ApiResponse<EventConfirmResult> => ({
       ok: false,
       error: { code: "NETWORK_ERROR", message: error instanceof Error ? error.message : "Не удалось подтвердить замену." },
@@ -388,6 +429,7 @@ export function SimulationDashboard() {
     </div>
 
     {versionMismatch ? <div className="notice-box" role="status">Сохранённый результат относится к версии {versionMismatch}, доступна версия {catalog.config.modelVersion}. Соберите план заново и пересчитайте его, чтобы не смешивать версии модели.</div> : null}
+    {storageNotice ? <div className="notice-box" role="status">{storageNotice}</div> : null}
     {catalog.config.dataMode === "synthetic" ? <div className="notice-box" role="note">Районы и эффекты — учебные синтетические данные. Это не реальная статистика и не административные границы города.</div> : null}
 
     <div className="filter-row" role="group" aria-label="Фильтр мероприятий по направлению">
@@ -532,4 +574,3 @@ export function SimulationDashboard() {
     <footer className="footer-note">Модель помогает исследовать компромиссы; баллы не являются официальной оценкой качества жизни города.</footer>
   </main>;
 }
-
