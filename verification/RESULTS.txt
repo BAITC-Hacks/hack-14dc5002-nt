@@ -1,22 +1,26 @@
-Verification performed for this starter package on 2026-09-23.
+Organizer-v1 verification performed on 2026-09-23.
 
 Command:
-  node verification/check-fixtures.mjs
+  node --experimental-strip-types --test tests/simulation/engine.test.mjs
 Result:
-  PASS: 581 fixture/catalog/math assertions.
+  PASS: 12 tests, including district targeting, budget/count validation, direction limits,
+  conflict scopes, linear lag, fixed synergies, clamp order, determinism and no mutation.
 
 Command:
-  tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler verification/fixture-literals.ts src/contracts/index.ts
+  node --experimental-strip-types verification/check-fixtures.mjs
 Result:
-  PASS: exit code 0, no TypeScript diagnostics.
+  PASS: 27 dataset, generated mock and golden-number assertions.
+
+Command:
+  npm exec --yes --package typescript@5.9.3 -- tsc --noEmit --strict --target ES2022 \
+    --module NodeNext --moduleResolution NodeNext --allowImportingTsExtensions \
+    src/lib/simulation/index.ts src/contracts/index.ts
+Result:
+  PASS: no TypeScript diagnostics.
+
+Golden values:
+  baseline Score 52.55768; sample portfolio cost 95; sample Score 56.54307; delta +3.98539.
 
 Scope:
-  Shared TypeScript contracts, literal fixture shapes, catalog references,
-  mathematical outputs for the supplied valid examples, five-action/budget
-  invariants within those examples, preservation of baseline fixtures,
-  ranking order, and expected sample comparisons.
-
-Not implemented or tested in this starter package:
-  The Next.js application, production simulation engine, route handlers,
-  browser UI, HTTP/e2e behavior, live OpenAI API, and deployment.
-  No API key was used and no live provider requests were made.
+  The deterministic engine, contracts, dataset and offline fixtures are checked. This repository
+  snapshot has no Next.js app, HTTP API, browser/e2e tests, deployment, or live AI integration.
