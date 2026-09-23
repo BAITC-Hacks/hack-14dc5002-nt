@@ -5,6 +5,7 @@ const baseURL = "http://127.0.0.1:3317";
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: true,
+  workers: process.env.CI ? 1 : undefined,
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: "list",
