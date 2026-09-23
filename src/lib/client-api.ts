@@ -41,12 +41,12 @@ async function request<T>(path: string, body?: unknown): Promise<ApiResponse<T>>
 }
 
 function mockScenario<T>(supported: boolean, fixture: ApiResponse<T>): ApiResponse<T> {
-  return supported ? fixture : error("MOCK_SCENARIO_NOT_DEFINED", "Для этого запроса нет mock-сценария.");
+  return supported ? structuredClone(fixture) : error("MOCK_SCENARIO_NOT_DEFINED", "Для этого запроса нет mock-сценария.");
 }
 
 export async function getCatalog(): Promise<ApiResponse<Catalog>> {
   if (!isMock) return request<Catalog>("/api/catalog");
-  return catalogFixture as ApiResponse<Catalog>;
+  return structuredClone(catalogFixture) as ApiResponse<Catalog>;
 }
 
 export async function simulate(plan: PlanInput): Promise<ApiResponse<SimulationResult>> {
@@ -58,7 +58,7 @@ export async function simulate(plan: PlanInput): Promise<ApiResponse<SimulationR
   ] as const;
   const match = scenarios.find(([expected]) => samePlan(plan, expected));
   return match
-    ? match[1] as unknown as ApiResponse<SimulationResult>
+    ? structuredClone(match[1]) as unknown as ApiResponse<SimulationResult>
     : error("MOCK_SCENARIO_NOT_DEFINED", "Для этого плана нет mock-сценария.");
 }
 
@@ -69,7 +69,7 @@ export async function previewEvent(input: EventPreviewInput): Promise<ApiRespons
     [requests.opportunityPreview, opportunityPreviewFixture],
   ] as const;
   const match = scenarios.find(([expected]) => expected.eventId === input.eventId && samePlan(input.basePlan, expected.basePlan));
-  return match ? match[1] as unknown as ApiResponse<EventPreviewResult> : error("MOCK_SCENARIO_NOT_DEFINED", "Для этого события и плана нет mock-сценария.");
+  return match ? structuredClone(match[1]) as unknown as ApiResponse<EventPreviewResult> : error("MOCK_SCENARIO_NOT_DEFINED", "Для этого события и плана нет mock-сценария.");
 }
 
 export async function confirmEvent(input: EventConfirmInput): Promise<ApiResponse<EventConfirmResult>> {
@@ -82,7 +82,7 @@ export async function confirmEvent(input: EventConfirmInput): Promise<ApiRespons
     && expected.removedActionId === input.removedActionId
     && expected.addedActionId === input.addedActionId
     && samePlan(input.basePlan, expected.basePlan));
-  return match ? match[1] as unknown as ApiResponse<EventConfirmResult> : error("MOCK_SCENARIO_NOT_DEFINED", "Для этой замены нет mock-сценария.");
+  return match ? structuredClone(match[1]) as unknown as ApiResponse<EventConfirmResult> : error("MOCK_SCENARIO_NOT_DEFINED", "Для этой замены нет mock-сценария.");
 }
 
 export async function explain(input: ExplainInput): Promise<ApiResponse<Explanation>> {
