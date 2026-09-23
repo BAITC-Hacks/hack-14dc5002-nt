@@ -1,7 +1,7 @@
 import { DIRECTIONS, INDICATORS } from "../../contracts/index.ts";
 import type {
   Action, Catalog, Direction, EventConfirmInput, EventConfirmResult,
-  EventPreviewInput, EventPreviewResult, Indicator, Metrics, PlanInput,
+  EventPreviewInput, EventPreviewResult, Indicator, Metrics, PlanInput, PlanSelection,
   SimulationResult, ValidSimulation, ValidationIssue,
 } from "../../contracts/index.ts";
 
@@ -26,17 +26,41 @@ export class DomainError extends Error {
 const makeIssue = (code: string, message: string, actionIds: string[] = []): ValidationIssue => ({ code, message, actionIds });
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const blankMetrics = (): Metrics => Object.fromEntries(INDICATORS.map((key) => [key, 0])) as Metrics;
+const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
+const nonemptyString = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
+const selectionShape = (value: unknown): value is PlanSelection => record(value) && typeof value.actionId === "string" && (value.districtId === undefined || typeof value.districtId === "string");
+
+function copiedSelections(plan: PlanInput): PlanSelection[] {
+  if (!Array.isArray(plan?.selections)) return [];
+  return plan.selections.filter(selectionShape).map(({ actionId, districtId }) => districtId === undefined ? { actionId } : { actionId, districtId });
+}
+
+function uniqueKnownCost(plan: PlanInput, catalog: Catalog): number {
+  const ids = new Set(copiedSelections(plan).map((selection) => selection.actionId));
+  const prices = new Map<string, number>();
+  for (const action of Array.isArray(catalog?.actions) ? catalog.actions : []) {
+    if (record(action) && typeof action.id === "string" && finite(action.cost) && action.cost >= 0 && !prices.has(action.id)) prices.set(action.id, action.cost);
+  }
+  return [...ids].reduce((sum, id) => sum + (prices.get(id) ?? 0), 0);
+}
 
 function catalogIssues(catalog: Catalog): ValidationIssue[] {
-  if (!catalog || !catalog.config || !Array.isArray(catalog.actions) || !Array.isArray(catalog.districts) || !Array.isArray(catalog.conflicts) || !Array.isArray(catalog.synergies)) {
+  if (!record(catalog) || !record(catalog.config) || !Array.isArray(catalog.actions) || !Array.isArray(catalog.districts) || !Array.isArray(catalog.conflicts) || !Array.isArray(catalog.synergies)) {
     return [makeIssue("INVALID_CATALOG", "Каталог имеет неверную структуру.")];
+  }
+  if (!record(catalog.config.indicatorWeights)
+    || catalog.actions.some((action) => !record(action) || !nonemptyString(action.id) || !record(action.effects) || !record(action.constraints) || !Array.isArray(action.constraints.requires) || !action.constraints.requires.every(nonemptyString))
+    || catalog.districts.some((district) => !record(district) || !nonemptyString(district.id) || !record(district.baseline))
+    || catalog.conflicts.some((conflict) => !record(conflict) || !Array.isArray(conflict.actionIds) || !conflict.actionIds.every(nonemptyString))
+    || catalog.synergies.some((synergy) => !record(synergy) || !Array.isArray(synergy.actionIds) || !synergy.actionIds.every(nonemptyString))) {
+    return [makeIssue("INVALID_CATALOG", "Некорректная структура мер, районов, весов или связей каталога.")];
   }
   const errors: ValidationIssue[] = [];
   const actionIds = new Set(catalog.actions.map((action) => action.id));
   const districtIds = new Set(catalog.districts.map((district) => district.id));
   if (actionIds.size !== catalog.actions.length || districtIds.size !== catalog.districts.length) errors.push(makeIssue("INVALID_CATALOG", "ID мероприятий и районов должны быть уникальны."));
   const cfg = catalog.config;
-  if (!cfg.modelVersion || !finite(cfg.budgetLimit) || cfg.budgetLimit < 0 || !Number.isInteger(cfg.decisionsRequired) || cfg.decisionsRequired <= 0 || !finite(cfg.horizonQuarters) || cfg.horizonQuarters <= 0 || cfg.lagRule !== "linear-remaining-horizon" || !finite(cfg.criticalThreshold) || !finite(cfg.criticalPenalty) || cfg.criticalPenalty < 0 || !Number.isInteger(cfg.maxActionsPerDirection) || cfg.maxActionsPerDirection <= 0 || !finite(cfg.populationAverageWeight) || !finite(cfg.weakestDistrictWeight) || cfg.populationAverageWeight < 0 || cfg.weakestDistrictWeight < 0 || Math.abs(cfg.populationAverageWeight + cfg.weakestDistrictWeight - 1) > EPSILON) {
+  if (!nonemptyString(cfg.modelVersion) || !finite(cfg.budgetLimit) || cfg.budgetLimit < 0 || !Number.isInteger(cfg.decisionsRequired) || cfg.decisionsRequired <= 0 || !finite(cfg.horizonQuarters) || cfg.horizonQuarters <= 0 || cfg.lagRule !== "linear-remaining-horizon" || !finite(cfg.criticalThreshold) || !finite(cfg.criticalPenalty) || cfg.criticalPenalty < 0 || !Number.isInteger(cfg.maxActionsPerDirection) || cfg.maxActionsPerDirection <= 0 || !finite(cfg.populationAverageWeight) || !finite(cfg.weakestDistrictWeight) || cfg.populationAverageWeight < 0 || cfg.weakestDistrictWeight < 0 || Math.abs(cfg.populationAverageWeight + cfg.weakestDistrictWeight - 1) > EPSILON) {
     errors.push(makeIssue("INVALID_CATALOG", "Настройки модели или веса Score некорректны."));
   }
   const indicatorWeightSum = INDICATORS.reduce((sum, key) => sum + (cfg.indicatorWeights?.[key] ?? Number.NaN), 0);
@@ -52,8 +76,21 @@ function catalogIssues(catalog: Catalog): ValidationIssue[] {
     for (const [key, value] of Object.entries(action.effects ?? {})) if (!INDICATORS.includes(key as Indicator) || !finite(value)) errors.push(makeIssue("INVALID_CATALOG", `Некорректный эффект меры ${action.id}/${key}.`, [action.id]));
     for (const requiredId of action.constraints?.requires ?? []) if (!actionIds.has(requiredId)) errors.push(makeIssue("INVALID_CATALOG", `Мера ${action.id} требует неизвестную меру ${requiredId}.`, [action.id, requiredId]));
   }
-  for (const conflict of catalog.conflicts) if (conflict.actionIds.length !== 2 || conflict.actionIds.some((id) => !actionIds.has(id))) errors.push(makeIssue("INVALID_CATALOG", "Конфликт ссылается на неизвестную меру."));
-  for (const synergy of catalog.synergies) if (synergy.actionIds.some((id) => !actionIds.has(id)) || !actionIds.has(synergy.districtActionId) || !INDICATORS.includes(synergy.indicator) || !finite(synergy.bonus)) errors.push(makeIssue("INVALID_CATALOG", "Синергия содержит некорректную ссылку или значение."));
+  const byId = new Map(catalog.actions.map((action) => [action.id, action]));
+  for (const conflict of catalog.conflicts) {
+    if (conflict.actionIds.length !== 2 || new Set(conflict.actionIds).size !== 2 || conflict.actionIds.some((id) => !actionIds.has(id))
+      || !["global", "same-district"].includes(conflict.scope)
+      || (conflict.scope === "same-district" && conflict.actionIds.some((id) => byId.get(id)?.scope !== "district"))) {
+      errors.push(makeIssue("INVALID_CATALOG", "Конфликт содержит некорректную пару мер или область действия."));
+    }
+  }
+  for (const synergy of catalog.synergies) {
+    if (synergy.actionIds.length !== 2 || new Set(synergy.actionIds).size !== 2 || synergy.actionIds.some((id) => !actionIds.has(id))
+      || !synergy.actionIds.includes(synergy.districtActionId) || byId.get(synergy.districtActionId)?.scope !== "district"
+      || !INDICATORS.includes(synergy.indicator) || !finite(synergy.bonus)) {
+      errors.push(makeIssue("INVALID_CATALOG", "Синергия содержит некорректную пару, районную меру или значение."));
+    }
+  }
   return errors;
 }
 
@@ -65,7 +102,7 @@ function canonicalSelections(plan: PlanInput): PlanInput["selections"] {
 export function validatePlan(plan: PlanInput, catalog: Catalog): ValidationIssue[] {
   const errors = catalogIssues(catalog);
   if (errors.length) return errors;
-  if (!plan || !Array.isArray(plan.selections)) return [makeIssue("INVALID_PLAN", "План должен содержать список решений.")];
+  if (!record(plan) || typeof plan.modelVersion !== "string" || !Array.isArray(plan.selections) || !plan.selections.every(selectionShape)) return [makeIssue("INVALID_PLAN", "План должен содержать версию модели и список решений с текстовыми ID.")];
   if (plan.modelVersion !== catalog.config.modelVersion) errors.push(makeIssue("MODEL_VERSION_MISMATCH", "Версия модели плана не совпадает с каталогом."));
   const selections = plan.selections;
   if (selections.length !== catalog.config.decisionsRequired) errors.push(makeIssue("INVALID_DECISION_COUNT", `Нужно принять ровно ${catalog.config.decisionsRequired} решений.`, selections.map((selection) => selection.actionId)));
@@ -93,7 +130,7 @@ export function validatePlan(plan: PlanInput, catalog: Catalog): ValidationIssue
     if (!selectedIds.has(firstId) || !selectedIds.has(secondId)) continue;
     if (conflict.scope === "global" || selectionById.get(firstId)?.districtId === selectionById.get(secondId)?.districtId) errors.push(makeIssue("ACTIONS_INCOMPATIBLE", `Меры ${firstId} и ${secondId} несовместимы${conflict.scope === "same-district" ? " в одном районе" : ""}.`, [firstId, secondId]));
   }
-  const totalCost = selections.reduce((sum, selection) => sum + (byId.get(selection.actionId)?.cost ?? 0), 0);
+  const totalCost = uniqueKnownCost(plan, catalog);
   if (totalCost > catalog.config.budgetLimit) errors.push(makeIssue("BUDGET_EXCEEDED", `Стоимость ${totalCost} превышает бюджет ${catalog.config.budgetLimit}.`));
   return errors;
 }
@@ -201,12 +238,10 @@ function calculateValid(plan: PlanInput, catalog: Catalog): ValidSimulation {
 /** Calculates only a valid five-decision plan; invalid plans have no Score. */
 export function simulatePlan(plan: PlanInput, catalog: Catalog): SimulationResult {
   const errors = validatePlan(plan, catalog);
-  const actionMap = new Map((catalog?.actions ?? []).map((action) => [action.id, action]));
-  const uniqueIds = new Set(plan?.selections?.map((selection) => selection.actionId) ?? []);
-  const totalCost = [...uniqueIds].reduce((sum, id) => sum + (actionMap.get(id)?.cost ?? 0), 0);
+  const totalCost = uniqueKnownCost(plan, catalog);
   if (errors.length) {
     return {
-      plan: { modelVersion: typeof plan?.modelVersion === "string" ? plan.modelVersion : "", selections: Array.isArray(plan?.selections) ? plan.selections.map((selection) => ({ ...selection })) : [] },
+      plan: { modelVersion: typeof plan?.modelVersion === "string" ? plan.modelVersion : "", selections: copiedSelections(plan) },
       totalCost,
       remainingBudget: finite(catalog?.config?.budgetLimit) ? catalog.config.budgetLimit - totalCost : 0,
       warnings: [], valid: false, officialScore: null, errors, metrics: null, trace: [],
