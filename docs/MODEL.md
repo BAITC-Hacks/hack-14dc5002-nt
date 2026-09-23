@@ -36,3 +36,75 @@ node --experimental-strip-types verification/check-fixtures.mjs
 Событие `cancel-m7` применяется только к валидной исходной пятёрке с M7. Оно сохраняет исходный результат и создает независимый черновик из четырех мер. У черновика нет Score/metrics. Для демонстрационного плана: расходы 95, старый остаток 5, возврат 24, расходы черновика 71, доступно `5 + 24 = 29`. Цены возврата и замены берутся из переданного каталога, а не из запроса.
 
 M7 недоступна в новой ветви. Для каждой другой еще не выбранной меры M1–M14 перебираются все допустимые цели: каждый район для районных мер и город для городских. Каждая полная пятёрка заново проходит обычный расчет со всеми ограничениями, зависимостями и синергиями. Сначала выбирается лучший район каждой меры, затем до трех разных мер: Score по убыванию, стоимость по возрастанию, ID меры и района лексикографически. Ранжирование использует неокругленные числа; улучшение относительно исходного плана не гарантировано. Если допустимых замен нет, список пустой.
+
+`confirmEvent` не принимает готовый рассчитанный результат или цену от клиента. Он повторно проверяет исходную пятёрку, ID/версию события, применимость отмены, удаление именно M7, доступность замены, район, бюджет, зависимости и несовместимости по текущему каталогу. Допускается любая валидная замена из сценария, не только три рекомендации. Исходный результат остается отдельным от новой ветви; это пересчет сценария от общего baseline, не прибавление эффектов к уже улучшенным показателям. Горизонт остается равным восьми кварталам, поскольку отмена происходит до исполнения. Новая возможность и другие события не реализованы: их параметры не согласованы.
+
+Для контрольного плана лучшие рекомендации:
+
+| Замена M7 | Расходы пятёрки | Score | Изменение к исходному плану |
+|---|---:|---:|---:|
+| M9 / Нура | 81 | 56.425135 | −0.117935 |
+| M14 / весь город | 87 | 55.70237 | −0.84070 |
+| M2 / весь город | 93 | 55.59237 | −0.95070 |
+
+Старые числа demo-v1 (90, 57.0, доступно 40, school_modular) относятся к замененной модели и не являются контрольными значениями organizer-v1.
+
+## Передача участнику 3: что готово и что нужно подключить
+
+Готовы чистые синхронные функции без зависимостей, сети, LLM, случайности и изменения входных данных:
+
+- `src/lib/simulation/index.ts`: `validatePlan(plan, catalog)` → `ValidationIssue[]`; `simulatePlan(plan, catalog)` → `SimulationResult`; общий класс `DomainError` с полями `code`, `message`, `issues`.
+- `src/lib/simulation/events.ts`: рабочие `previewEvent(input, catalog)` → `TeamEventPreviewResult` и `confirmEvent(input, catalog)` → `TeamEventConfirmResult` для согласованной отмены M7. Эти функции импортируются **из отдельного модуля**, не из `index.ts`.
+- `src/lib/simulation/event-types.ts`: типы расширения, принадлежащие движку; `src/data/team-events.ts`: неизменяемое описание сценария и его версии.
+
+Пример вызова после загрузки и проверки каталога интегратором; пути импортов показаны относительно корня репозитория:
+
+```ts
+import type { Catalog } from "./src/contracts/index.ts";
+import { simulatePlan } from "./src/lib/simulation/index.ts";
+import { previewEvent, confirmEvent } from "./src/lib/simulation/events.ts";
+import { SCHOOL_CANCELLATION_EVENT as event } from "./src/data/team-events.ts";
+
+export function runExample(catalog: Catalog) {
+  const base = simulatePlan(catalog.demoPlan, catalog);
+  const input = {
+    basePlan: catalog.demoPlan,
+    eventId: event.id,             // cancel-m7
+    eventVersion: event.version,   // team-events-v1
+  };
+  const preview = previewEvent(input, catalog);
+  const option = preview.replacementOptions[0];
+  if (!option) return { base, preview }; // Нет допустимой одношаговой замены.
+  const confirmed = confirmEvent({
+    ...input,
+    removedActionId: option.removedActionId,
+    addedActionId: option.addedActionId,
+    ...(option.addedSelection.districtId === undefined
+      ? {} : { addedDistrictId: option.addedSelection.districtId }),
+  }, catalog);
+  return { base, preview, confirmed };
+}
+```
+
+Перед включением событий участнику 3 требуется согласовать/перенести расширение в общий контракт и HTTP-схемы:
+
+1. Заменить `event: never` на конкретный тип события. Пустой исходный `Catalog.events` не выдавать за источник согласованных командных событий.
+2. Добавить `eventVersion` в preview/confirm, `addedDistrictId?` в confirm, `addedSelection` в вариант замены. Район для районной замены обязателен, для городской запрещен; нельзя терять его при выборе рекомендации.
+3. Учесть поля предпросмотра `refundAmount`, `availableBudget`, `draftResult` (всегда invalid). `comparison` содержит разницу Score, десяти средневзвешенных показателей и показателей/баллов каждого района относительно исходной пятёрки.
+4. Обработать `DomainError` в существующем формате `{ ok: false, error: { code, message, issues } }`. Модуль не создает HTTP-ответы и не сохраняет планы; загрузка каталога, хранение/проверка исходного плана пользователя и подключение маршрутов принадлежат API.
+
+Коды ошибок сценария: `INVALID_EVENT_INPUT`, `UNKNOWN_EVENT`, `EVENT_VERSION_MISMATCH`, `INVALID_BASE_PLAN`, `EVENT_MODEL_MISMATCH`, `EVENT_NOT_APPLICABLE`, `INVALID_REPLACEMENT_INPUT`, `INVALID_REMOVAL`, `INVALID_REPLACEMENT`. Для последнего подробности находятся в `issues`, в том числе `ACTION_UNAVAILABLE`, `REPLACEMENT_NOT_ALLOWED`, `UNKNOWN_ACTION`, `BUDGET_EXCEEDED` и обычные ошибки валидатора. `INVALID_EVENT_STATE` — защитная проверка внутреннего инварианта.
+
+Участнику 1 достаточно передать готовые результаты после интеграции API: отдельно исходная пятёрка, неоцениваемый черновик и подтвержденная пятёрка. AI может объяснять рассчитанные различия, но не подменять числа. UI, API, AI, зависимости, общий контракт и исходные моки в этом расширении не изменены. Текст выше — инструкция для передачи, не подтверждение интеграции или отправки сообщения тиммейту.
+
+## Проверка поставки движка
+
+После добавления сценария проходят 29 тестов в `tests/simulation/*.test.mjs` и 27 контрольных проверок `verification/check-fixtures.mjs`. Тесты событий проверяют все сочетания меры и района для замены контрольного плана, ранжирование и равенства, ноль/один/два/три варианта, устаревшие цены/эффекты, зависимости после отмены, неизменность замороженных входов и независимость исходного результата от ветви.
+
+Строгая проверка типов для обоих модулей (без добавления зависимости в проект; TypeScript должен быть доступен в локальном npm-кэше):
+
+```sh
+npm exec --offline --yes --package typescript@5.9.3 -- tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --allowImportingTsExtensions src/lib/simulation/index.ts src/lib/simulation/events.ts src/contracts/index.ts
+```
+
+Тесты запускаются Node.js с поддержкой `--experimental-strip-types`. Проверка всего приложения здесь не заявляется: каркас/запуск приложения и сквозное подключение относятся к интеграции, не к поставке участника 2.

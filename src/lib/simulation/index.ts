@@ -251,6 +251,7 @@ export function simulatePlan(plan: PlanInput, catalog: Catalog): SimulationResul
 }
 
 // The supplied organizer dataset lists no events. Preserve explicit failures for stale clients.
+// The approved opt-in team scenario has separate exports/types in ./events.ts until API integration.
 export function previewEvent(_input: EventPreviewInput, _catalog: Catalog): EventPreviewResult {
   const errors = [makeIssue("EVENTS_NOT_CONFIGURED", "В предоставленном наборе данных события не заданы.")];
   throw new DomainError("EVENTS_NOT_CONFIGURED", errors[0].message, errors);

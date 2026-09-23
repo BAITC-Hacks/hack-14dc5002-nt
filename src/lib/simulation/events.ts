@@ -2,7 +2,10 @@ import { INDICATORS } from "../../contracts/index.ts";
 import type { Catalog, Comparison, Metrics, PlanInput, PlanSelection, ValidSimulation } from "../../contracts/index.ts";
 import { SCHOOL_CANCELLATION_EVENT } from "../../data/team-events.ts";
 import { DomainError, simulatePlan } from "./index.ts";
-import type { TeamEventPreviewInput, TeamEventPreviewResult, TeamReplacementOption } from "./event-types.ts";
+import type {
+  TeamEventConfirmInput, TeamEventConfirmResult, TeamEventPreviewInput,
+  TeamEventPreviewResult, TeamReplacementOption,
+} from "./event-types.ts";
 
 export type * from "./event-types.ts";
 
@@ -94,4 +97,28 @@ export function previewEvent(input: TeamEventPreviewInput, catalog: Catalog): Te
     requiresReplacement: true,
     replacementOptions: [...bestByAction.values()].sort(rank).slice(0, state.event.maxRecommendations),
   };
+}
+
+/** Rebuild from the authoritative base plan and current catalog; never trust a preview. */
+export function confirmEvent(input: TeamEventConfirmInput, catalog: Catalog): TeamEventConfirmResult {
+  if (!record(input) || !nonemptyString(input.removedActionId) || !nonemptyString(input.addedActionId)
+    || (input.addedDistrictId !== undefined && typeof input.addedDistrictId !== "string")) {
+    throw new DomainError("INVALID_REPLACEMENT_INPUT", "Необходимы ID удаляемой меры, ID замены и корректный район.");
+  }
+  const state = prepareEvent(input, catalog);
+  if (input.removedActionId !== state.event.cancelledActionId) {
+    throw new DomainError("INVALID_REMOVAL", "При отмене M7 нельзя удалить другую меру.");
+  }
+  if (!state.event.replacementActionIds.includes(input.addedActionId)) {
+    const code = input.addedActionId === state.event.cancelledActionId ? "ACTION_UNAVAILABLE"
+      : catalog.actions.some((action) => action.id === input.addedActionId) ? "REPLACEMENT_NOT_ALLOWED" : "UNKNOWN_ACTION";
+    const issue = { code, message: "Эта мера недоступна как замена в данном сценарии.", actionIds: [input.addedActionId] };
+    throw new DomainError("INVALID_REPLACEMENT", issue.message, [issue]);
+  }
+  const addedSelection: PlanSelection = input.addedDistrictId === undefined
+    ? { actionId: input.addedActionId }
+    : { actionId: input.addedActionId, districtId: input.addedDistrictId };
+  const branch = simulatePlan(replacementPlan(state.draft, addedSelection), catalog);
+  if (!branch.valid) throw new DomainError("INVALID_REPLACEMENT", "Замена не образует допустимую пятёрку.", branch.errors);
+  return { base: state.base, event: state.event, branch, comparison: comparison(state.base, branch) };
 }
