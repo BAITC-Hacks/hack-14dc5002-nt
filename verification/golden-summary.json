@@ -1,0 +1,43 @@
+{
+  "baseScore": 57.0,
+  "baseScoreDisplay": "57.0",
+  "newScore": 56.60000000000001,
+  "newScoreDisplay": "56.6",
+  "scoreDelta": -0.3999999999999915,
+  "baseCost": 90,
+  "draftCost": 60,
+  "availableAfterCancellation": 40,
+  "replacementCost": 36,
+  "newCost": 96,
+  "cancellationOptions": [
+    {
+      "add": "bus_fleet",
+      "cost": 84,
+      "score": 56.599999999999994
+    },
+    {
+      "add": "school_modular",
+      "cost": 96,
+      "score": 56.60000000000001
+    },
+    {
+      "add": "service_centers",
+      "cost": 78,
+      "score": 56.53333333333333
+    }
+  ],
+  "opportunityOptions": [
+    {
+      "remove": "bus_lanes",
+      "score": 58.66666666666667
+    },
+    {
+      "remove": "lighting_smart",
+      "score": 58.400000000000006
+    },
+    {
+      "remove": "park_local",
+      "score": 58.0
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "ok": true,
+  "data": {
+    "plan": {
+      "modelVersion": "demo-v1",
+      "actionIds": [
+        "bus_lanes",
+        "lighting_smart",
+        "park_local",
+        "safe_crossings",
+        "school_new",
+        "services_online"
+      ]
+    },
+    "totalCost": 100,
+    "remainingBudget": 0,
+    "warnings": [],
+    "valid": false,
+    "officialScore": null,
+    "errors": [
+      {
+        "code": "DECISION_COUNT",
+        "message": "Нужно выбрать ровно пять мероприятий.",
+        "actionIds": []
+      }
+    ],
+    "metrics": null,
+    "trace": []
+  }
+}

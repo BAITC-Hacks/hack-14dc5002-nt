@@ -1,0 +1,119 @@
+{
+  "simulateValid": {
+    "modelVersion": "demo-v1",
+    "actionIds": [
+      "bus_lanes",
+      "school_new",
+      "park_local",
+      "lighting_smart",
+      "services_online"
+    ]
+  },
+  "simulateInvalidFour": {
+    "modelVersion": "demo-v1",
+    "actionIds": [
+      "bus_lanes",
+      "lighting_smart",
+      "park_local",
+      "services_online"
+    ]
+  },
+  "simulateInvalidSix": {
+    "modelVersion": "demo-v1",
+    "actionIds": [
+      "bus_lanes",
+      "lighting_smart",
+      "park_local",
+      "safe_crossings",
+      "school_new",
+      "services_online"
+    ]
+  },
+  "eventPreview": {
+    "basePlan": {
+      "modelVersion": "demo-v1",
+      "actionIds": [
+        "bus_lanes",
+        "school_new",
+        "park_local",
+        "lighting_smart",
+        "services_online"
+      ]
+    },
+    "eventId": "school_site_unavailable"
+  },
+  "eventConfirm": {
+    "basePlan": {
+      "modelVersion": "demo-v1",
+      "actionIds": [
+        "bus_lanes",
+        "school_new",
+        "park_local",
+        "lighting_smart",
+        "services_online"
+      ]
+    },
+    "eventId": "school_site_unavailable",
+    "removedActionId": "school_new",
+    "addedActionId": "school_modular"
+  },
+  "opportunityPreview": {
+    "basePlan": {
+      "modelVersion": "demo-v1",
+      "actionIds": [
+        "bus_lanes",
+        "school_new",
+        "park_local",
+        "lighting_smart",
+        "services_online"
+      ]
+    },
+    "eventId": "digital_grant_available"
+  },
+  "opportunityConfirm": {
+    "basePlan": {
+      "modelVersion": "demo-v1",
+      "actionIds": [
+        "bus_lanes",
+        "school_new",
+        "park_local",
+        "lighting_smart",
+        "services_online"
+      ]
+    },
+    "eventId": "digital_grant_available",
+    "removedActionId": "bus_lanes",
+    "addedActionId": "digital_grant"
+  },
+  "explainBase": {
+    "kind": "base",
+    "plan": {
+      "modelVersion": "demo-v1",
+      "actionIds": [
+        "bus_lanes",
+        "school_new",
+        "park_local",
+        "lighting_smart",
+        "services_online"
+      ]
+    }
+  },
+  "explainEvent": {
+    "kind": "event",
+    "change": {
+      "basePlan": {
+        "modelVersion": "demo-v1",
+        "actionIds": [
+          "bus_lanes",
+          "school_new",
+          "park_local",
+          "lighting_smart",
+          "services_online"
+        ]
+      },
+      "eventId": "school_site_unavailable",
+      "removedActionId": "school_new",
+      "addedActionId": "school_modular"
+    }
+  }
+}

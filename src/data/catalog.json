@@ -1,0 +1,487 @@
+{
+  "config": {
+    "modelVersion": "demo-v1",
+    "budgetLimit": 100,
+    "decisionsRequired": 5,
+    "horizonMonths": 12,
+    "lagRule": "step",
+    "dimensionWeights": {
+      "transport": 0.2,
+      "green": 0.2,
+      "social": 0.2,
+      "safety": 0.2,
+      "services": 0.2
+    },
+    "dataMode": "synthetic",
+    "disclaimer": "Демонстрационная модель: синтетические данные и условные районы D1–D3. Не официальная статистика, не административное деление и не прогноз Астаны."
+  },
+  "districts": [
+    {
+      "id": "D1",
+      "name": "Демо-район Север",
+      "weight": 0.3333333333333333,
+      "baseline": {
+        "transport": 45,
+        "green": 42,
+        "social": 46,
+        "safety": 44,
+        "services": 48
+      }
+    },
+    {
+      "id": "D2",
+      "name": "Демо-район Центр",
+      "weight": 0.3333333333333333,
+      "baseline": {
+        "transport": 58,
+        "green": 50,
+        "social": 55,
+        "safety": 52,
+        "services": 55
+      }
+    },
+    {
+      "id": "D3",
+      "name": "Демо-район Юг",
+      "weight": 0.3333333333333333,
+      "baseline": {
+        "transport": 40,
+        "green": 38,
+        "social": 42,
+        "safety": 41,
+        "services": 43
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "bus_lanes",
+      "title": "Выделенные автобусные полосы",
+      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
+      "direction": "transport",
+      "cost": 18,
+      "lagMonths": 2,
+      "effects": {
+        "D1": {
+          "transport": 16,
+          "green": -2
+        },
+        "D2": {
+          "transport": 10,
+          "green": -1
+        }
+      },
+      "constraints": {
+        "requires": [],
+        "excludes": []
+      },
+      "availability": {
+        "kind": "always"
+      }
+    },
+    {
+      "id": "bus_fleet",
+      "title": "Обновление автобусного парка",
+      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
+      "direction": "transport",
+      "cost": 24,
+      "lagMonths": 4,
+      "effects": {
+        "D1": {
+          "transport": 10,
+          "green": 3
+        },
+        "D3": {
+          "transport": 12,
+          "green": 3
+        }
+      },
+      "constraints": {
+        "requires": [],
+        "excludes": []
+      },
+      "availability": {
+        "kind": "always"
+      }
+    },
+    {
+      "id": "traffic_signals",
+      "title": "Настройка светофоров",
+      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
+      "direction": "transport",
+      "cost": 14,
+      "lagMonths": 1,
+      "effects": {
+        "D1": {
+          "transport": 8,
+          "safety": 3
+        },
+        "D2": {
+          "transport": 8,
+          "safety": 3
+        }
+      },
+      "constraints": {
+        "requires": [],
+        "excludes": []
+      },
+      "availability": {
+        "kind": "always"
+      }
+    },
+    {
+      "id": "park_local",
+      "title": "Озеленение общественных пространств",
+      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
+      "direction": "green",
+      "cost": 16,
+      "lagMonths": 3,
+      "effects": {
+        "D1": {
+          "green": 18,
+          "safety": 3
+        },
+        "D3": {
+          "green": 12
+        }
+      },
+      "constraints": {
+        "requires": [],
+        "excludes": []
+      },
+      "availability": {
+        "kind": "always"
+      }
+    },
+    {
+      "id": "tree_belts",
+      "title": "Защитные зеленые полосы",
+      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
+      "direction": "green",
+      "cost": 20,
+      "lagMonths": 6,
+      "effects": {
+        "D1": {
+          "green": 12
+        },
+        "D2": {
+          "green": 8
+        },
+        "D3": {
+          "green": 7
+        }
+      },
+      "constraints": {
+        "requires": [],
+        "excludes": []
+      },
+      "availability": {
+        "kind": "always"
+      }
+    },
+    {
+      "id": "green_longterm",
+      "title": "Долгосрочный городской лес",
+      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
+      "direction": "green",
+      "cost": 18,
+      "lagMonths": 18,
+      "effects": {
+        "D1": {
+          "green": 25
+        },
+        "D3": {
+          "green": 25
+        }
+      },
+      "constraints": {
+        "requires": [],
+        "excludes": []
+      },
+      "availability": {
+        "kind": "always"
+      }
+    },
+    {
+      "id": "school_new",
+      "title": "Строительство школы",
+      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
+      "direction": "social",
+      "cost": 30,
+      "lagMonths": 6,
+      "effects": {
+        "D3": {
+          "social": 24,
+          "services": 4
+        },
+        "D2": {
+          "social": 6
+        }
+      },
+      "constraints": {
+        "requires": [],
+        "excludes": [
+          "school_modular"
+        ]
+      },
+      "availability": {
+        "kind": "always"
+      }
+    },
+    {
+      "id": "school_modular",
+      "title": "Модульные учебные корпуса",
+      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
+      "direction": "social",
+      "cost": 36,
+      "lagMonths": 3,
+      "effects": {
+        "D3": {
+          "social": 22,
+          "services": 3
+        },
+        "D2": {
+          "social": 3
+        }
+      },
+      "constraints": {
+        "requires": [],
+        "excludes": [
+          "school_new"
+        ]
+      },
+      "availability": {
+        "kind": "always"
+      }
+    },
+    {
+      "id": "classes_rental",
+      "title": "Аренда помещений под учебные классы",
+      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
+      "direction": "social",
+      "cost": 22,
+      "lagMonths": 0,
+      "effects": {
+        "D3": {
+          "social": 17,
+          "services": 2
+        },
+        "D2": {
+          "social": 2
+        }
+      },
+      "constraints": {
+        "requires": [],
+        "excludes": []
+      },
+      "availability": {
+        "kind": "always"
+      }
+    },
+    {
+      "id": "clinic_outreach",
+      "title": "Выездные медицинские бригады",
+      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
+      "direction": "social",
+      "cost": 20,
+      "lagMonths": 1,
+      "effects": {
+        "D3": {
+          "social": 13
+        },
+        "D1": {
+          "social": 7,
+          "services": 4
+        }
+      },
+      "constraints": {
+        "requires": [],
+        "excludes": []
+      },
+      "availability": {
+        "kind": "always"
+      }
+    },
+    {
+      "id": "lighting_smart",
+      "title": "Освещение безопасных маршрутов",
+      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
+      "direction": "safety",
+      "cost": 12,
+      "lagMonths": 1,
+      "effects": {
+        "D3": {
+          "safety": 18,
+          "services": 2
+        },
+        "D1": {
+          "safety": 8,
+          "green": -1
+        }
+      },
+      "constraints": {
+        "requires": [],
+        "excludes": []
+      },
+      "availability": {
+        "kind": "always"
+      }
+    },
+    {
+      "id": "safe_crossings",
+      "title": "Безопасные пешеходные переходы",
+      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
+      "direction": "safety",
+      "cost": 10,
+      "lagMonths": 1,
+      "effects": {
+        "D1": {
+          "safety": 10,
+          "transport": -2
+        },
+        "D3": {
+          "safety": 12
+        }
+      },
+      "constraints": {
+        "requires": [],
+        "excludes": []
+      },
+      "availability": {
+        "kind": "always"
+      }
+    },
+    {
+      "id": "safety_sensors",
+      "title": "Датчики состояния освещения",
+      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
+      "direction": "safety",
+      "cost": 8,
+      "lagMonths": 2,
+      "effects": {
+        "D1": {
+          "safety": 5
+        },
+        "D3": {
+          "safety": 7
+        }
+      },
+      "constraints": {
+        "requires": [
+          "lighting_smart"
+        ],
+        "excludes": []
+      },
+      "availability": {
+        "kind": "always"
+      }
+    },
+    {
+      "id": "services_online",
+      "title": "Городские услуги онлайн",
+      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
+      "direction": "services",
+      "cost": 14,
+      "lagMonths": 1,
+      "effects": {
+        "D1": {
+          "services": 15
+        },
+        "D2": {
+          "services": 12
+        },
+        "D3": {
+          "services": 10,
+          "social": 2
+        }
+      },
+      "constraints": {
+        "requires": [],
+        "excludes": []
+      },
+      "availability": {
+        "kind": "always"
+      }
+    },
+    {
+      "id": "service_centers",
+      "title": "Мобильные центры обслуживания",
+      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
+      "direction": "services",
+      "cost": 18,
+      "lagMonths": 2,
+      "effects": {
+        "D1": {
+          "services": 10
+        },
+        "D2": {
+          "services": 5
+        },
+        "D3": {
+          "services": 12
+        }
+      },
+      "constraints": {
+        "requires": [],
+        "excludes": []
+      },
+      "availability": {
+        "kind": "always"
+      }
+    },
+    {
+      "id": "digital_grant",
+      "title": "Грантовая программа цифровых услуг",
+      "description": "Синтетическое мероприятие учебной модели; эффекты не являются прогнозом реального города.",
+      "direction": "services",
+      "cost": 8,
+      "lagMonths": 0,
+      "effects": {
+        "D1": {
+          "services": 15
+        },
+        "D2": {
+          "services": 15
+        },
+        "D3": {
+          "services": 15,
+          "social": 3
+        }
+      },
+      "constraints": {
+        "requires": [],
+        "excludes": []
+      },
+      "availability": {
+        "kind": "event",
+        "eventId": "digital_grant_available"
+      }
+    }
+  ],
+  "events": [
+    {
+      "id": "school_site_unavailable",
+      "title": "Строительство школы отменено: участок недоступен",
+      "description": "Учебный сценарий: план еще не исполнен; вся стоимость школы возвращается в бюджет ветки.",
+      "kind": "cancellation",
+      "blockedActionId": "school_new"
+    },
+    {
+      "id": "digital_grant_available",
+      "title": "Открылась грантовая программа цифровых услуг",
+      "description": "Предварительно описанный проект стал доступен. Он должен заменить одно из пяти мероприятий.",
+      "kind": "opportunity",
+      "unlockedActionId": "digital_grant"
+    }
+  ],
+  "demoPlan": {
+    "modelVersion": "demo-v1",
+    "actionIds": [
+      "bus_lanes",
+      "school_new",
+      "park_local",
+      "lighting_smart",
+      "services_online"
+    ]
+  }
+}

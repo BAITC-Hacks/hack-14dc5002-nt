@@ -1,0 +1,171 @@
+{
+  "ok": true,
+  "data": {
+    "plan": {
+      "modelVersion": "demo-v1",
+      "actionIds": [
+        "bus_lanes",
+        "lighting_smart",
+        "park_local",
+        "school_new",
+        "services_online"
+      ]
+    },
+    "totalCost": 90,
+    "remainingBudget": 10,
+    "warnings": [],
+    "valid": true,
+    "officialScore": 57.0,
+    "errors": [],
+    "metrics": {
+      "dimensions": {
+        "transport": 56.33333333333333,
+        "green": 51.99999999999999,
+        "social": 58.33333333333333,
+        "safety": 55.33333333333333,
+        "services": 62.99999999999999
+      },
+      "districts": [
+        {
+          "districtId": "D1",
+          "before": {
+            "transport": 45,
+            "green": 42,
+            "social": 46,
+            "safety": 44,
+            "services": 48
+          },
+          "after": {
+            "transport": 61,
+            "green": 57,
+            "social": 46,
+            "safety": 55,
+            "services": 63
+          },
+          "scoreBefore": 45.0,
+          "scoreAfter": 56.400000000000006,
+          "scoreDelta": 11.400000000000006
+        },
+        {
+          "districtId": "D2",
+          "before": {
+            "transport": 58,
+            "green": 50,
+            "social": 55,
+            "safety": 52,
+            "services": 55
+          },
+          "after": {
+            "transport": 68,
+            "green": 49,
+            "social": 61,
+            "safety": 52,
+            "services": 67
+          },
+          "scoreBefore": 54.0,
+          "scoreAfter": 59.400000000000006,
+          "scoreDelta": 5.400000000000006
+        },
+        {
+          "districtId": "D3",
+          "before": {
+            "transport": 40,
+            "green": 38,
+            "social": 42,
+            "safety": 41,
+            "services": 43
+          },
+          "after": {
+            "transport": 40,
+            "green": 50,
+            "social": 68,
+            "safety": 59,
+            "services": 59
+          },
+          "scoreBefore": 40.800000000000004,
+          "scoreAfter": 55.2,
+          "scoreDelta": 14.399999999999999
+        }
+      ],
+      "baselineOfficialScore": 46.6,
+      "deltaFromBaseline": 10.399999999999999
+    },
+    "trace": [
+      {
+        "actionId": "bus_lanes",
+        "active": true,
+        "lagMonths": 2,
+        "appliedEffects": {
+          "D1": {
+            "transport": 16,
+            "green": -2
+          },
+          "D2": {
+            "transport": 10,
+            "green": -1
+          }
+        }
+      },
+      {
+        "actionId": "lighting_smart",
+        "active": true,
+        "lagMonths": 1,
+        "appliedEffects": {
+          "D3": {
+            "safety": 18,
+            "services": 2
+          },
+          "D1": {
+            "safety": 8,
+            "green": -1
+          }
+        }
+      },
+      {
+        "actionId": "park_local",
+        "active": true,
+        "lagMonths": 3,
+        "appliedEffects": {
+          "D1": {
+            "green": 18,
+            "safety": 3
+          },
+          "D3": {
+            "green": 12
+          }
+        }
+      },
+      {
+        "actionId": "school_new",
+        "active": true,
+        "lagMonths": 6,
+        "appliedEffects": {
+          "D3": {
+            "social": 24,
+            "services": 4
+          },
+          "D2": {
+            "social": 6
+          }
+        }
+      },
+      {
+        "actionId": "services_online",
+        "active": true,
+        "lagMonths": 1,
+        "appliedEffects": {
+          "D1": {
+            "services": 15
+          },
+          "D2": {
+            "services": 12
+          },
+          "D3": {
+            "services": 10,
+            "social": 2
+          }
+        }
+      }
+    ]
+  }
+}

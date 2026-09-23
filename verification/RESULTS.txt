@@ -1,0 +1,22 @@
+Verification performed for this starter package on 2026-09-23.
+
+Command:
+  node verification/check-fixtures.mjs
+Result:
+  PASS: 581 fixture/catalog/math assertions.
+
+Command:
+  tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler verification/fixture-literals.ts src/contracts/index.ts
+Result:
+  PASS: exit code 0, no TypeScript diagnostics.
+
+Scope:
+  Shared TypeScript contracts, literal fixture shapes, catalog references,
+  mathematical outputs for the supplied valid examples, five-action/budget
+  invariants within those examples, preservation of baseline fixtures,
+  ranking order, and expected sample comparisons.
+
+Not implemented or tested in this starter package:
+  The Next.js application, production simulation engine, route handlers,
+  browser UI, HTTP/e2e behavior, live OpenAI API, and deployment.
+  No API key was used and no live provider requests were made.
