@@ -1,4 +1,5 @@
 /** Live HTTP contract. Legacy demo-v1 UI types stay in index.ts during migration. */
+export { DIRECTIONS, INDICATORS } from "./organizer";
 export type {
   Action, ApiResponse, Comparison, Direction, District, Indicator, Metrics,
   PlanInput, PlanSelection, SimulationResult, ValidSimulation, ValidationIssue,
@@ -19,6 +20,7 @@ export type EventConfirmInput =
   | OpportunityConfirmInput;
 export type EventPreviewResult = TeamEventPreviewResult | OpportunityPreviewResult;
 export type EventConfirmResult = TeamEventConfirmResult | OpportunityConfirmResult;
+export type ReplacementOption = EventPreviewResult["replacementOptions"][number];
 export interface TeamEventDescriptor {
   id: "cancel-action" | "cancel-m7" | "require-action";
   version: string;
