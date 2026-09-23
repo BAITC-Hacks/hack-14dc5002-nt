@@ -105,7 +105,7 @@ function ScoreResult({
         <p><strong>Компромисс:</strong> {explanation.tradeoff}</p>
         <p><strong>Ограничение:</strong> {explanation.limitation}</p>
       </> : null}
-      {!explaining && !explanation && !explanationError ? <button className="button button-secondary button-small" onClick={onExplain}>Получить объяснение</button> : null}
+      {!explaining && !explanation ? <button className="button button-secondary button-small" type="button" onClick={onExplain}>{explanationError ? "Повторить объяснение" : "Получить объяснение"}</button> : null}
     </div>
     <p className="disclaimer">{catalog.config.disclaimer}</p>
   </>;
@@ -207,7 +207,7 @@ export function SimulationDashboard() {
     };
   }, []);
 
-  const actions = catalog?.actions ?? [];
+  const actions = useMemo(() => catalog?.actions ?? [], [catalog]);
   const actionMap = useMemo(
     () => new Map(actions.map((action): [string, Action] => [action.id, action])),
     [actions],
@@ -526,7 +526,7 @@ export function SimulationDashboard() {
             {eventPreviewResult.replacementOptions.map((option) => {
               const optionKey = option.removedActionId + "|" + option.addedActionId;
               const selected = replacementKey === optionKey;
-              return <button type="button" className={"replacement-card " + (selected ? "selected" : "")} key={optionKey} aria-pressed={selected} onClick={() => setReplacementKey(optionKey)}>
+              return <button type="button" className={"replacement-card " + (selected ? "selected" : "")} key={optionKey} aria-pressed={selected} disabled={confirmingEvent} onClick={() => setReplacementKey(optionKey)}>
                 <span className="replacement-radio" aria-hidden="true">{selected ? "●" : "○"}</span>
                 <span className="replacement-copy">
                   <strong>{actionMap.get(option.addedActionId)?.title ?? option.addedActionId}</strong>
@@ -536,7 +536,6 @@ export function SimulationDashboard() {
               </button>;
             })}
           </div>
-          {eventError ? <ErrorBox>{eventError}</ErrorBox> : null}
           <div className="event-actions">
             <span className="district-sub">Предварительный балл относится к полному валидному плану из пяти мер.</span>
             <button className="button button-primary" type="button" disabled={!replacementKey || confirmingEvent} onClick={() => {
@@ -565,8 +564,8 @@ export function SimulationDashboard() {
             <div className="explanation-head"><strong>Объяснение последствий</strong>{eventExplanation?.source === "template" ? <span className="template-label">Шаблонное объяснение</span> : null}{eventExplanation?.source === "ai" ? <span className="template-label">Объяснение ИИ</span> : null}</div>
             {explainingEvent ? <div className="loading-row"><span className="spinner" />Готовим пояснение…</div> : null}
             {eventExplanationError ? <ErrorBox>{eventExplanationError}</ErrorBox> : null}
-            {eventExplanation ? <><p>{eventExplanation.summary}</p><p><strong>Компромисс:</strong> {eventExplanation.tradeoff}</p><p><strong>Ограничение:</strong> {eventExplanation.limitation}</p></> : null}
-            {!explainingEvent && !eventExplanation && !eventExplanationError ? <button className="button button-secondary button-small" type="button" onClick={() => void explainConfirmedEvent()}>Получить объяснение</button> : null}
+            {eventExplanation ? <><p>{eventExplanation.summary}</p>{eventExplanation.observations.map((item, index) => <p key={item.actionIds.join("-") + "-" + index}>{item.text}</p>)}<p><strong>Компромисс:</strong> {eventExplanation.tradeoff}</p><p><strong>Ограничение:</strong> {eventExplanation.limitation}</p></> : null}
+            {!explainingEvent && !eventExplanation ? <button className="button button-secondary button-small" type="button" onClick={() => void explainConfirmedEvent()}>{eventExplanationError ? "Повторить объяснение" : "Получить объяснение"}</button> : null}
           </div>
         </div> : null}
       </> : null}

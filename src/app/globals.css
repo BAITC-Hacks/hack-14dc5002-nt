@@ -102,7 +102,7 @@ button:focus-visible, a:focus-visible, summary:focus-visible {
 .mini-tag.alert { border-color:#f2ddd0; background:#fff6f0; color:#9b6248; }
 .action-check { position:absolute; top:10px; left:10px; display:grid; width:19px; height:19px; place-items:center; border:1px solid #cbd4cb; border-radius:50%; background:white; color:white; font-size:11px; }
 .action-card.selected .action-check { border-color:var(--green); background:var(--green); }
-.action-card.selected h4 { padding-left:22px; }
+.action-card h4 { padding-left:22px; }
 .selection-summary { margin-top:14px; border-top:1px solid var(--line); padding-top:14px; }
 .selection-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
 .selection-head strong { font-size:12px; }
@@ -174,7 +174,8 @@ button:focus-visible, a:focus-visible, summary:focus-visible {
 .replacement-heading { margin:19px 0 10px; }
 .replacement-list { display:grid; gap:8px; }
 .replacement-card { display:flex; width:100%; align-items:center; gap:12px; border:1px solid var(--line); border-radius:12px; padding:12px; background:#fff; cursor:pointer; text-align:left; }
-.replacement-card:hover { border-color:#b7cbb8; }
+.replacement-card:hover:not(:disabled) { border-color:#b7cbb8; }
+.replacement-card:disabled { cursor:wait; }
 .replacement-card.selected { border-color:#68a177; background:#f5faf3; box-shadow:inset 0 0 0 1px #b6d6bc; }
 .replacement-radio { color:var(--green); font-size:17px; }
 .replacement-copy { display:grid; flex:1; gap:2px; }
