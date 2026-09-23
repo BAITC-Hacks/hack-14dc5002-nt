@@ -50,7 +50,7 @@ npm run start
 | `npx tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler verification/fixture-literals.ts src/contracts/index.ts` | PASS |
 | `npm run test:e2e` с `PLAYWRIGHT_CHANNEL=msedge`, `CI=true` | PASS: 10 тестов (5 desktop + 5 mobile), один worker, 41,9 с |
 | `npm run build` с пустыми `OPENAI_API_KEY`/`OPENAI_MODEL`, `AI_ENABLED=false`, `NEXT_PUBLIC_USE_MOCK_API=true` | PASS; то же предупреждение lint |
-| YAML `.github/workflows/ci.yml` | Успешно разобран; это ещё не выполнение CI на GitHub |
+| GitHub Actions | Задания не начались из-за блокировки оплаты; workflow впоследствии удалён по решению команды |
 
 Предупреждение lint относится к массиву `actions` в зависимости `useMemo`; исправление
 в файле интерфейса нужно согласовать с его владельцем. `typecheck` теперь сначала
@@ -65,10 +65,11 @@ E2E выполнены в headless Edge на desktop и эмуляции моб�
 После добавления сценариев `typecheck` повторно прошёл, lint завершился с тем же
 предупреждением. Реальный мобильный телефон не использовался.
 
-Добавлен GitHub Actions workflow: при push в `main`, `Bakytzhan`, `Semba`, `Nikita`
-и для PR в `main` выполняются проверки кода, fixtures, сборка и браузерные сценарии.
-Среда CI — Ubuntu 24.04, Node.js 24.11.1, Chromium; API-ключи не используются.
-Фактический результат удалённого запуска CI проверяется отдельно после публикации.
+GitHub Actions не смог запустить задания: GitHub вернул сообщение
+«The job was not started because your account is locked due to a billing issue».
+По решению команды файл `.github/workflows/ci.yml` удалён; автоматических запусков
+на push/PR больше нет. Локальные проверки и конфигурация Playwright сохранены.
+Старые результаты GitHub относятся к прежнему коммиту, а не к выполненным тестам.
 
 Исторические результаты ниже относятся к каркасу до объединения UI.
 
