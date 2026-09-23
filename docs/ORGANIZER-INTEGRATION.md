@@ -31,3 +31,38 @@
 400 — некорректная форма; 409 — версия; 422 — недопустимый переход события;
 500 — обезличенная ошибка. Невалидный бизнес-план имеет HTTP 200, `valid:false`,
 `officialScore:null`, `metrics:null`; такие результаты нельзя отображать как нулевой Score.
+
+## События и подключение интерфейса
+
+Живые `POST /api/events/preview` и `/api/events/confirm` подключены к `simulation/events.ts`.
+Вызовы из `simulation/index.ts` намеренно оставлены заглушками Никиты и не используются HTTP API.
+
+Сценарии выбирает пользователь учебного симулятора: они не случайные серверные задания.
+Подтверждение stateless: сервер снова проверяет исходную пятёрку, событие, ID замены и район.
+Поэтому preview не является разрешением на выполнение; сервер не доверяет присланным числам.
+Цепочки событий и частичный возврат бюджета здесь не реализованы.
+
+Для Сембы:
+
+1. Перейти с `@/contracts` на `@/contracts/organizer-api`, с `@/lib/client-api` на
+   `@/lib/organizer-api`. Старый интерфейс до миграции работает только в mock=true.
+2. Выбирать `districtId` для `scope:district`; для `scope:city` не передавать район.
+   План хранить как `selections`, а не только `actionIds`. Старый localStorage не мигрировать
+   молча — предложить пользователю собрать план заново.
+3. Отображать `horizonQuarters`, `metrics.indicators`, `metrics.directions`, `populationWeight`;
+   направление озеленения теперь `ecology`. Все данные синтетические.
+4. Читать сценарии из `catalog.teamEvents`, поскольку организаторский `catalog.events` пуст.
+5. Для отмены отправить `eventId:cancel-action`, `eventVersion:team-events-v2`,
+   `cancelledActionId`. Preview содержит `draftResult` без Score, `refundAmount`, `availableBudget`.
+6. Для подтверждения добавить `removedActionId`, `addedActionId`, и
+   `addedDistrictId:option.addedSelection.districtId` (если район задан).
+7. Для обязательной меры: `eventId:require-action`, `eventVersion:team-events-v3`,
+   `requiredActionId`. Это обязательная существующая мера, а не разблокировка новой.
+   Обработать `already-satisfied`, `replacement-required`, `no-valid-replacement`.
+   Общего `draftResult` здесь нет; бюджет указан у каждого варианта отдельно.
+
+Новый клиент поддерживает AbortSignal; при смене плана отменять старый запрос.
+Mock=true использует только явные `src/mocks/organizer/scenarios.json` с клонированием ответов;
+несовпадение района/версии/ID возвращает `MOCK_SCENARIO_NOT_DEFINED`.
+В mock=false запросы идут в HTTP API и считаются движком, а не fixtures.
+Для обновления расчетных fixtures: `node --experimental-strip-types verification/generate-organizer-mocks.mjs`.
